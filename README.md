@@ -21,9 +21,10 @@ Premissas:
 | React | 18.3 |
 | TypeScript | 5.6 |
 | Vite | 5.4 |
+| Vitest + @testing-library/react | 2.1 / 16.1 |
 | Servidor de produção | nginx (alpine) |
 
-Sem libs de UI/state externas — `fetch` nativo e `useState/useEffect`.
+Sem libs de UI/state externas — `fetch` nativo e `useState/useEffect`. Auth OAuth2/PKCE implementada à mão sobre Web Crypto API.
 
 ---
 
@@ -31,11 +32,20 @@ Sem libs de UI/state externas — `fetch` nativo e `useState/useEffect`.
 
 ```
 src/
-├── main.tsx
-├── App.tsx                                    # Layout: sidebar + área principal
+├── main.tsx                                   # Monta <AuthProvider><App /></AuthProvider>
+├── App.tsx                                    # Gate de login + sidebar + botão "Sair"
 ├── App.css / index.css
 ├── api/
-│   └── bff.ts                                 # Cliente HTTP do BFF (todas as chamadas ficam aqui)
+│   ├── bff.ts                                 # Cliente HTTP do BFF — injeta Authorization: Bearer
+│   └── __tests__/bff.test.ts
+├── auth/
+│   ├── pkce.ts                                # Web Crypto: code_verifier, S256 challenge, state
+│   ├── storage.ts                             # sessionStorage (sp.auth.tokens, sp.auth.pkce)
+│   ├── oauth.ts                               # fetchAuthConfig, startLogin, exchangeCodeForTokens, logout
+│   ├── AuthProvider.tsx                       # Context React com status loading|auth|unauth|error
+│   └── __tests__/                             # pkce / storage / oauth
+├── test/
+│   └── setup.ts                               # @testing-library/jest-dom
 ├── types/
 │   └── index.ts                               # MenuItem, UiSchema, FlowDefinition, OrchestrationResponse
 └── components/
@@ -88,6 +98,11 @@ npm run build
 
 # 4. Preview do build de produção
 npm run preview
+
+# 5. Testes unitários
+npm test                     # vitest run
+npm run test:watch           # modo watch
+npm run coverage             # gate de 95% via vite.config.ts
 ```
 
 O dev server sobe em `http://localhost:5173`. O BFF precisa estar rodando em `http://localhost:8081`.
@@ -141,6 +156,8 @@ bff.flows.execute(version, flowId, payload)  // POST   /bff/orchestrate/{version
 ```
 
 A base é sempre `/bff` — em dev resolve via proxy do Vite, em produção via proxy do nginx.
+
+O cliente lê automaticamente `sp.auth.tokens` do `sessionStorage` e injeta `Authorization: Bearer <access_token>` em todas as requisições. Em respostas **401**, dispara o handler registrado por `setOnUnauthorized(...)` (o `AuthProvider` usa isso para limpar tokens e voltar à tela de login) — depois ainda lança o erro normalmente.
 
 ---
 
@@ -225,6 +242,52 @@ O `Dockerfile` faz build em duas etapas (Node 22 + nginx alpine). O `docker-entr
 
 ---
 
-## Autenticação
+## Autenticação — OAuth2 Authorization Code + PKCE (S256)
 
-Atualmente **não há fluxo de login implementado** — o BFF aceita requisições autenticadas via JWT do Authentik, mas o frontend ainda não negocia esse token. Próximo passo natural: integrar o fluxo OAuth2/PKCE com Authentik e injetar o `Authorization: Bearer` em `src/api/bff.ts`.
+A SPA é um **client público**: faz o fluxo PKCE direto contra o Authentik, recebe um access token e o envia ao BFF (que valida via JWKS). O BFF nunca emite tokens nem mantém sessão.
+
+### Módulos em [src/auth/](src/auth/)
+
+| Arquivo | Responsabilidade |
+|---|---|
+| [pkce.ts](src/auth/pkce.ts) | `generateCodeVerifier` (43–128 chars unreserved), `generateCodeChallenge` (SHA-256 + base64url) e `generateRandomString` para `state`/`nonce`. Implementação sobre `crypto.subtle` e `crypto.getRandomValues` — sem dependências |
+| [storage.ts](src/auth/storage.ts) | Persistência em `sessionStorage` — chaves `sp.auth.tokens` (access/id/refresh + `expiresAt`) e `sp.auth.pkce` (`codeVerifier`, `state`, `returnTo`) |
+| [oauth.ts](src/auth/oauth.ts) | `fetchAuthConfig()`, `startLogin()`, `exchangeCodeForTokens()`, `logout()` e `isTokenValid()` (skew configurável) |
+| [AuthProvider.tsx](src/auth/AuthProvider.tsx) | Context React com `status: 'loading' \| 'unauthenticated' \| 'authenticated' \| 'error'`. Detecta `/auth/callback`, troca `code` por token, registra handler de 401 no cliente do BFF |
+
+### Fluxo
+
+```
+1. AuthProvider monta → GET /bff/auth/config         (issuer, client_id, scopes)
+2. Usuário clica "Entrar" → startLogin()
+   ├─ gera code_verifier (64 chars) e state
+   ├─ persiste em sessionStorage
+   └─ window.location = ${issuer}authorize/?response_type=code&code_challenge=…&code_challenge_method=S256&state=…
+3. Authentik autentica → redirect /auth/callback?code=…&state=…
+4. AuthProvider detecta /auth/callback:
+   ├─ valida state contra o persistido (anti-CSRF)
+   ├─ POST ${issuer}token/  (grant_type=authorization_code + code_verifier + client_id)
+   ├─ guarda { accessToken, idToken, refreshToken, expiresAt } em sessionStorage
+   └─ history.replaceState('/')  → cai no app autenticado
+5. bff.ts injeta Authorization: Bearer <access_token> em toda requisição
+6. Logout → clearTokens + window.location = ${issuer}end-session/?id_token_hint=…&post_logout_redirect_uri=…
+```
+
+### Configuração no Authentik
+
+Cadastre uma **OAuth2/OIDC Provider** + uma **Application** com slug `service-portal`. O provider deve ser **public client** (sem secret), com PKCE obrigatório, e ter o redirect URI da SPA registrado (ex: `http://localhost:5173/auth/callback`). Defina `AUTHENTIK_CLIENT_ID` no BFF com o mesmo `client_id` cadastrado.
+
+### Storage / segurança
+
+- Tokens em `sessionStorage` — somem ao fechar a aba; sobrevivem a reload.
+- O `refresh_token` é guardado mas o renew automático **ainda não está implementado**: quando o access token expira ou o BFF responde 401, a sessão é invalidada e o usuário precisa relogar.
+- `state` e `code_verifier` ficam em `sessionStorage` apenas durante o redirect — limpos no callback.
+
+### Testes
+
+Cobertura atual: **100%** lines/branches/functions/statements em `src/auth/**` e `src/api/**` — gate ≥ 95% configurado em [vite.config.ts](vite.config.ts) (`coverage.thresholds`). 41 testes em 4 arquivos.
+
+```bash
+npm run coverage
+# Relatório HTML: coverage/index.html
+```

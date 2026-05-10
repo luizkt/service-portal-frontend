@@ -1,12 +1,27 @@
 import type { FlowDefinition, MenuItem, OrchestrationResponse, UiSchema } from '../types'
+import { loadTokens } from '../auth/storage'
 
 const BASE = '/bff'
 
+/** Injetado pelo AuthProvider para invalidar a sessão em respostas 401. */
+let onUnauthorized: (() => void) | null = null
+export function setOnUnauthorized(handler: (() => void) | null): void {
+  onUnauthorized = handler
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    ...options,
-  })
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options?.headers as Record<string, string> | undefined),
+  }
+  const tokens = loadTokens()
+  if (tokens?.accessToken) {
+    headers['Authorization'] = `Bearer ${tokens.accessToken}`
+  }
+  const res = await fetch(`${BASE}${path}`, { ...options, headers })
+  if (res.status === 401 && onUnauthorized) {
+    onUnauthorized()
+  }
   if (!res.ok) {
     const body = await res.text()
     throw new Error(`${res.status} ${res.statusText}: ${body}`)
