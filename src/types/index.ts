@@ -12,21 +12,31 @@ export interface UiSchema {
 }
 
 export interface FlowDefinition {
-  mongoId: string
-  id: string
-  descricao: string
-  versao: string
-  ativo: boolean
-  criadoEm: string
-  atualizadoEm: string
+  flowId: string
+  version: string
+  description: string
+  active: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+/** Spring Data Page envelope retornado por `GET /bff/flows` (sem `status=active`). */
+export interface FlowsPage {
+  content: FlowDefinition[]
+  totalElements: number
+  totalPages: number
+  size: number
+  number: number
+  first: boolean
+  last: boolean
 }
 
 export interface OrchestrationResponse {
   executionId: string
   flowId: string
   status: string
-  resultado: Record<string, unknown>
+  result: Record<string, unknown>
   errorMessage?: string
-  iniciadoEm: string
-  finalizadoEm: string
+  startedAt: string
+  finishedAt: string
 }

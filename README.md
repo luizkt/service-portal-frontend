@@ -4,7 +4,7 @@ Frontend do Service Portal, baseado em React 18 + TypeScript + Vite 5.
 
 ## Visão Geral
 
-Aplicação SPA construída sobre o padrão **Server Driven UI**: o frontend não tem regras de negócio nem rotas hardcoded. O `service-portal-bff` informa quais funcionalidades existem (`/bff/menu`) e qual componente cada uma usa (`/bff/ui/{featureId}`); o frontend só registra os componentes disponíveis e renderiza dinamicamente.
+Aplicação SPA construída sobre o padrão **Server Driven UI**: o frontend não tem regras de negócio nem rotas hardcoded. O `service-portal-bff` informa quais funcionalidades existem (`/bff/menu`) e qual componente cada uma usa (`/bff/features/{featureId}/ui-schema`); o frontend só registra os componentes disponíveis e renderiza dinamicamente.
 
 Premissas:
 
@@ -115,7 +115,7 @@ O dev server sobe em `http://localhost:5173`. O BFF precisa estar rodando em `ht
 
 ```
 1. App.tsx                → bff.menu()              → /bff/menu
-2. Usuário clica em item  → bff.uiSchema(item.id)   → /bff/ui/{featureId}
+2. Usuário clica em item  → bff.uiSchema(item.id)   → /bff/features/{featureId}/ui-schema
 3. ComponentRenderer      → componentMap[schema.type]  → renderiza o componente
 ```
 
@@ -144,15 +144,16 @@ Se o `type` não estiver mapeado, o `ComponentRenderer` mostra uma mensagem de "
 Todas as chamadas ficam concentradas em [src/api/bff.ts](src/api/bff.ts):
 
 ```ts
-bff.menu()                                   // GET    /bff/menu
-bff.uiSchema(featureId)                      // GET    /bff/ui/{featureId}
+bff.menu()                                                // GET    /bff/menu
+bff.uiSchema(featureId)                                   // GET    /bff/features/{featureId}/ui-schema
 
-bff.flows.list()                             // GET    /bff/flows
-bff.flows.get(flowId)                        // GET    /bff/flows/{flowId}
-bff.flows.create(yaml)                       // POST   /bff/flows           (text/plain)
-bff.flows.update(flowId, yaml)               // PUT    /bff/flows/{flowId}  (text/plain)
-bff.flows.delete(flowId)                     // DELETE /bff/flows/{flowId}
-bff.flows.execute(version, flowId, payload)  // POST   /bff/orchestrate/{version}/{flowId}
+bff.flows.list({ page, size, sort, status })              // GET    /bff/flows[?status=active&page=...]
+bff.flows.get(flowId, version)                            // GET    /bff/flows/{flowId}/versions/{version}
+bff.flows.getYaml(flowId, version)                        // GET    /bff/flows/{flowId}/versions/{version}/yaml
+bff.flows.create(yaml)                                    // POST   /bff/flows           (text/plain)
+bff.flows.update(flowId, version, yaml)                   // PUT    /bff/flows/{flowId}/versions/{version}
+bff.flows.delete(flowId, version)                         // DELETE /bff/flows/{flowId}/versions/{version}
+bff.flows.execute(flowId, version, payload)               // POST   /bff/flows/{flowId}/versions/{version}/executions
 ```
 
 A base é sempre `/bff` — em dev resolve via proxy do Vite, em produção via proxy do nginx.
@@ -207,23 +208,32 @@ interface UiSchema {
 }
 
 interface FlowDefinition {
-  mongoId: string
-  id: string
-  descricao: string
-  versao: string
-  ativo: boolean
-  criadoEm: string
-  atualizadoEm: string
+  flowId: string
+  version: string
+  description: string
+  active: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+interface FlowsPage {
+  content: FlowDefinition[]
+  totalElements: number
+  totalPages: number
+  size: number
+  number: number
+  first: boolean
+  last: boolean
 }
 
 interface OrchestrationResponse {
   executionId: string
   flowId: string
   status: string
-  resultado: Record<string, unknown>
+  result: Record<string, unknown>
   errorMessage?: string
-  iniciadoEm: string
-  finalizadoEm: string
+  startedAt: string
+  finishedAt: string
 }
 ```
 

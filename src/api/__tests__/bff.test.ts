@@ -53,19 +53,32 @@ describe('bff client', () => {
 
   it('204 retorna undefined (delete)', async () => {
     mockFetch(new Response(null, { status: 204 }))
-    const result = await bff.flows.delete('flow-x')
+    const result = await bff.flows.delete('flow-x', '1.0')
     expect(result).toBeUndefined()
   })
 
-  it('flows.get monta path correto', async () => {
-    const f = mockFetch(new Response('{"id":"f1"}', { status: 200 }))
-    await bff.flows.get('f1')
-    expect(f.mock.calls[0][0]).toBe('/bff/flows/f1')
+  it('flows.get monta /bff/flows/{id}/versions/{v}', async () => {
+    const f = mockFetch(new Response('{"flowId":"f1","version":"1.0"}', { status: 200 }))
+    await bff.flows.get('f1', '1.0')
+    expect(f.mock.calls[0][0]).toBe('/bff/flows/f1/versions/1.0')
   })
 
-  it('flows.list', async () => {
-    mockFetch(new Response('[]', { status: 200 }))
-    expect(await bff.flows.list()).toEqual([])
+  it('flows.list sem args usa /bff/flows', async () => {
+    const f = mockFetch(new Response('{"content":[]}', { status: 200 }))
+    await bff.flows.list()
+    expect(f.mock.calls[0][0]).toBe('/bff/flows')
+  })
+
+  it('flows.list com status=active vai como query param', async () => {
+    const f = mockFetch(new Response('[]', { status: 200 }))
+    await bff.flows.list({ status: 'active' })
+    expect(f.mock.calls[0][0]).toBe('/bff/flows?status=active')
+  })
+
+  it('flows.list com paginação completa', async () => {
+    const f = mockFetch(new Response('{"content":[]}', { status: 200 }))
+    await bff.flows.list({ page: 1, size: 50, sort: 'flowId,asc' })
+    expect(f.mock.calls[0][0]).toBe('/bff/flows?page=1&size=50&sort=flowId%2Casc')
   })
 
   it('flows.create envia YAML como text/plain', async () => {
@@ -77,27 +90,51 @@ describe('bff client', () => {
     expect(init.body).toBe('id: foo\n')
   })
 
-  it('flows.update envia PUT com YAML', async () => {
+  it('flows.update PUT em /bff/flows/{id}/versions/{v}', async () => {
     const f = mockFetch(new Response('{}', { status: 200 }))
-    await bff.flows.update('f1', 'yaml')
+    await bff.flows.update('f1', '1.0', 'yaml')
     const init = f.mock.calls[0][1] as RequestInit
     expect(init.method).toBe('PUT')
-    expect(f.mock.calls[0][0]).toBe('/bff/flows/f1')
+    expect(f.mock.calls[0][0]).toBe('/bff/flows/f1/versions/1.0')
   })
 
-  it('flows.execute monta path com version e flowId e envia JSON', async () => {
+  it('flows.execute POST em /bff/flows/{id}/versions/{v}/executions', async () => {
     const f = mockFetch(new Response('{"executionId":"e1"}', { status: 200 }))
-    const r = await bff.flows.execute('v2', 'meu-fluxo', { x: 1 })
-    expect(f.mock.calls[0][0]).toBe('/bff/orchestrate/v2/meu-fluxo')
+    const r = await bff.flows.execute('my-flow', 'v2', { x: 1 })
+    expect(f.mock.calls[0][0]).toBe('/bff/flows/my-flow/versions/v2/executions')
     const init = f.mock.calls[0][1] as RequestInit
     expect(init.method).toBe('POST')
     expect(init.body).toBe('{"x":1}')
     expect(r).toMatchObject({ executionId: 'e1' })
   })
 
-  it('uiSchema usa featureId no path', async () => {
+  it('flows.getYaml GET com Accept application/x-yaml', async () => {
+    saveTokens({ accessToken: 'AT', expiresAt: Date.now() + 60_000 })
+    const f = mockFetch(new Response('flow:\n  id: x\n', { status: 200 }))
+    const yaml = await bff.flows.getYaml('f1', '1.0')
+    expect(yaml).toBe('flow:\n  id: x\n')
+    expect(f.mock.calls[0][0]).toBe('/bff/flows/f1/versions/1.0/yaml')
+    const headers = (f.mock.calls[0][1] as RequestInit).headers as Record<string, string>
+    expect(headers['Accept']).toBe('application/x-yaml')
+    expect(headers['Authorization']).toBe('Bearer AT')
+  })
+
+  it('flows.getYaml lança erro em falha não-ok', async () => {
+    mockFetch(new Response('boom', { status: 500, statusText: 'ERR' }))
+    await expect(bff.flows.getYaml('f1', '1.0')).rejects.toThrow(/500.*ERR.*boom/s)
+  })
+
+  it('flows.getYaml chama onUnauthorized em 401', async () => {
+    const handler = vi.fn()
+    setOnUnauthorized(handler)
+    mockFetch(new Response('nope', { status: 401, statusText: 'Unauthorized' }))
+    await expect(bff.flows.getYaml('f1', '1.0')).rejects.toThrow(/401/)
+    expect(handler).toHaveBeenCalledOnce()
+  })
+
+  it('uiSchema usa /bff/features/{id}/ui-schema', async () => {
     const f = mockFetch(new Response('{"featureId":"x","type":"x","title":"X"}', { status: 200 }))
     await bff.uiSchema('x')
-    expect(f.mock.calls[0][0]).toBe('/bff/ui/x')
+    expect(f.mock.calls[0][0]).toBe('/bff/features/x/ui-schema')
   })
 })

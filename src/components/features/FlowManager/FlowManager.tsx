@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { bff } from '../../../api/bff'
-import type { FlowDefinition, OrchestrationResponse, UiSchema } from '../../../types'
+import type { FlowDefinition, FlowsPage, OrchestrationResponse, UiSchema } from '../../../types'
 import './FlowManager.css'
 
 interface Props {
@@ -9,31 +9,35 @@ interface Props {
 
 type View = 'list' | 'create' | 'detail' | 'execute'
 
-const FLOW_TEMPLATE = `fluxo:
-  id: "meu-fluxo"
-  descricao: "Descrição do fluxo"
-  versao: "1.0.0"
-  ativo: true
+const FLOW_TEMPLATE = `flow:
+  id: "my-flow"
+  description: "Flow description"
+  version: "1.0.0"
+  active: true
 
-  contrato:
-    campos:
-      - nome: "campo"
-        tipo: STRING
-        obrigatorio: true
-        validacoes:
-          - tipo: NOT_BLANK
+  contract:
+    fields:
+      - name: "field"
+        type: STRING
+        required: true
+        validations:
+          - type: NOT_BLANK
 
-  integracoes:
-    - id: "passo-1"
-      ordem: 1
-      tipo: HTTP
-      continuarEmErro: false
+  integrations:
+    - id: "step-1"
+      order: 1
+      type: HTTP
+      continueOnError: false
       http:
         url: "http://example.com/api"
-        metodo: GET
+        method: GET
         headers:
           Accept: "application/json"
 `
+
+function isPage(x: FlowsPage | FlowDefinition[]): x is FlowsPage {
+  return !Array.isArray(x) && typeof (x as FlowsPage).content !== 'undefined'
+}
 
 export function FlowManager({ schema }: Props) {
   const [view, setView] = useState<View>('list')
@@ -47,7 +51,6 @@ export function FlowManager({ schema }: Props) {
   const [submitting, setSubmitting] = useState(false)
 
   // Execute state
-  const [execVersion, setExecVersion] = useState('v1')
   const [execPayload, setExecPayload] = useState('{\n  \n}')
   const [execResult, setExecResult] = useState<OrchestrationResponse | null>(null)
   const [executing, setExecuting] = useState(false)
@@ -56,8 +59,9 @@ export function FlowManager({ schema }: Props) {
     setLoading(true)
     setError(null)
     try {
-      const data = await bff.flows.list()
-      setFlows(data)
+      // Lista de ativos (sem yamlContent) — ideal para a tela inicial
+      const data = await bff.flows.list({ status: 'active' })
+      setFlows(isPage(data) ? data.content : data)
     } catch (e) {
       setError(String(e))
     } finally {
@@ -89,7 +93,7 @@ export function FlowManager({ schema }: Props) {
     setSubmitting(true)
     setError(null)
     try {
-      await bff.flows.update(selected.id, yaml)
+      await bff.flows.update(selected.flowId, selected.version, yaml)
       await loadFlows()
       setView('list')
     } catch (e) {
@@ -99,12 +103,12 @@ export function FlowManager({ schema }: Props) {
     }
   }
 
-  const handleDelete = async (flowId: string) => {
-    if (!confirm(`Desativar o fluxo "${flowId}"?`)) return
+  const handleDelete = async (flow: FlowDefinition) => {
+    if (!confirm(`Desativar o fluxo "${flow.flowId}" versão ${flow.version}?`)) return
     try {
-      await bff.flows.delete(flowId)
+      await bff.flows.delete(flow.flowId, flow.version)
       await loadFlows()
-      if (selected?.id === flowId) {
+      if (selected?.flowId === flow.flowId && selected?.version === flow.version) {
         setSelected(null)
         setView('list')
       }
@@ -117,16 +121,23 @@ export function FlowManager({ schema }: Props) {
     setSelected(flow)
     setView('detail')
     try {
-      const full = await bff.flows.get(flow.id)
+      const full = await bff.flows.get(flow.flowId, flow.version)
       setSelected(full)
     } catch (_) {}
   }
 
-  const handleEditFromDetail = () => {
+  const handleEditFromDetail = async () => {
     if (!selected) return
-    setYaml(
-      `fluxo:\n  id: "${selected.id}"\n  descricao: "${selected.descricao ?? ''}"\n  versao: "${selected.versao}"\n  ativo: ${selected.ativo}\n`
-    )
+    try {
+      // Recupera o YAML cru atual para edição
+      const yamlContent = await bff.flows.getYaml(selected.flowId, selected.version)
+      setYaml(yamlContent)
+    } catch {
+      // Fallback: gera um YAML mínimo a partir dos metadados
+      setYaml(
+        `flow:\n  id: "${selected.flowId}"\n  description: "${selected.description ?? ''}"\n  version: "${selected.version}"\n  active: ${selected.active}\n`
+      )
+    }
     setView('create')
   }
 
@@ -144,7 +155,7 @@ export function FlowManager({ schema }: Props) {
         setExecuting(false)
         return
       }
-      const result = await bff.flows.execute(execVersion, selected.id, payload)
+      const result = await bff.flows.execute(selected.flowId, selected.version, payload)
       setExecResult(result)
     } catch (e) {
       setError(String(e))
@@ -158,6 +169,8 @@ export function FlowManager({ schema }: Props) {
     return new Date(iso).toLocaleString('pt-BR')
   }
 
+  const flowKey = (f: FlowDefinition) => `${f.flowId}_${f.version}`
+
   return (
     <div className="fm">
       <div className="fm-header">
@@ -169,7 +182,7 @@ export function FlowManager({ schema }: Props) {
             </button>
           )}
           {view === 'list' && (
-            <button className="btn btn-primary" onClick={() => { setYaml(FLOW_TEMPLATE); setView('create'); setError(null) }}>
+            <button className="btn btn-primary" onClick={() => { setYaml(FLOW_TEMPLATE); setSelected(null); setView('create'); setError(null) }}>
               + Novo Fluxo
             </button>
           )}
@@ -208,17 +221,17 @@ export function FlowManager({ schema }: Props) {
               </thead>
               <tbody>
                 {flows.map(flow => (
-                  <tr key={flow.mongoId ?? flow.id} onClick={() => handleViewDetail(flow)} className="fm-table-row">
-                    <td className="fm-flow-id">{flow.id}</td>
-                    <td>{flow.descricao ?? '—'}</td>
-                    <td><span className="fm-badge">{flow.versao}</span></td>
-                    <td className="fm-date">{formatDate(flow.criadoEm)}</td>
+                  <tr key={flowKey(flow)} onClick={() => handleViewDetail(flow)} className="fm-table-row">
+                    <td className="fm-flow-id">{flow.flowId}</td>
+                    <td>{flow.description ?? '—'}</td>
+                    <td><span className="fm-badge">{flow.version}</span></td>
+                    <td className="fm-date">{formatDate(flow.createdAt)}</td>
                     <td onClick={e => e.stopPropagation()}>
                       <div className="fm-row-actions">
                         <button className="btn btn-sm btn-ghost" onClick={() => { setSelected(flow); setView('execute'); setExecResult(null) }}>
                           ▶ Executar
                         </button>
-                        <button className="btn btn-sm btn-danger" onClick={() => handleDelete(flow.id)}>
+                        <button className="btn btn-sm btn-danger" onClick={() => handleDelete(flow)}>
                           Desativar
                         </button>
                       </div>
@@ -234,7 +247,7 @@ export function FlowManager({ schema }: Props) {
       {/* CREATE / EDIT VIEW */}
       {view === 'create' && (
         <div className="fm-form">
-          <h2 className="fm-form-title">{selected ? `Editar: ${selected.id}` : 'Novo Fluxo'}</h2>
+          <h2 className="fm-form-title">{selected ? `Editar: ${selected.flowId} (${selected.version})` : 'Novo Fluxo'}</h2>
           <p className="fm-form-hint">Cole ou edite o YAML do fluxo abaixo.</p>
           <textarea
             className="fm-yaml-editor"
@@ -261,31 +274,31 @@ export function FlowManager({ schema }: Props) {
           <div className="fm-detail-card">
             <div className="fm-detail-row">
               <span className="fm-detail-label">ID</span>
-              <span className="fm-detail-value fm-flow-id">{selected.id}</span>
+              <span className="fm-detail-value fm-flow-id">{selected.flowId}</span>
             </div>
             <div className="fm-detail-row">
               <span className="fm-detail-label">Descrição</span>
-              <span className="fm-detail-value">{selected.descricao ?? '—'}</span>
+              <span className="fm-detail-value">{selected.description ?? '—'}</span>
             </div>
             <div className="fm-detail-row">
               <span className="fm-detail-label">Versão</span>
-              <span className="fm-detail-value"><span className="fm-badge">{selected.versao}</span></span>
+              <span className="fm-detail-value"><span className="fm-badge">{selected.version}</span></span>
             </div>
             <div className="fm-detail-row">
               <span className="fm-detail-label">Status</span>
               <span className="fm-detail-value">
-                <span className={`fm-status ${selected.ativo ? 'fm-status--active' : 'fm-status--inactive'}`}>
-                  {selected.ativo ? 'Ativo' : 'Inativo'}
+                <span className={`fm-status ${selected.active ? 'fm-status--active' : 'fm-status--inactive'}`}>
+                  {selected.active ? 'Ativo' : 'Inativo'}
                 </span>
               </span>
             </div>
             <div className="fm-detail-row">
               <span className="fm-detail-label">Criado em</span>
-              <span className="fm-detail-value fm-date">{formatDate(selected.criadoEm)}</span>
+              <span className="fm-detail-value fm-date">{formatDate(selected.createdAt)}</span>
             </div>
             <div className="fm-detail-row">
               <span className="fm-detail-label">Atualizado em</span>
-              <span className="fm-detail-value fm-date">{formatDate(selected.atualizadoEm)}</span>
+              <span className="fm-detail-value fm-date">{formatDate(selected.updatedAt)}</span>
             </div>
           </div>
           <div className="fm-detail-actions">
@@ -295,7 +308,7 @@ export function FlowManager({ schema }: Props) {
             <button className="btn btn-ghost" onClick={handleEditFromDetail}>
               Editar YAML
             </button>
-            <button className="btn btn-danger" onClick={() => handleDelete(selected.id)}>
+            <button className="btn btn-danger" onClick={() => handleDelete(selected)}>
               Desativar
             </button>
           </div>
@@ -305,15 +318,11 @@ export function FlowManager({ schema }: Props) {
       {/* EXECUTE VIEW */}
       {view === 'execute' && selected && (
         <div className="fm-execute">
-          <h2 className="fm-form-title">Executar: <span className="fm-flow-id">{selected.id}</span></h2>
+          <h2 className="fm-form-title">
+            Executar: <span className="fm-flow-id">{selected.flowId}</span>{' '}
+            <span className="fm-badge">{selected.version}</span>
+          </h2>
           <div className="fm-execute-form">
-            <label className="fm-label">Versão do fluxo</label>
-            <input
-              className="fm-input"
-              value={execVersion}
-              onChange={e => setExecVersion(e.target.value)}
-              placeholder="v1"
-            />
             <label className="fm-label">Payload (JSON)</label>
             <textarea
               className="fm-yaml-editor"
@@ -336,7 +345,7 @@ export function FlowManager({ schema }: Props) {
               {execResult.errorMessage && (
                 <div className="fm-exec-error-msg">{execResult.errorMessage}</div>
               )}
-              <pre className="fm-exec-json">{JSON.stringify(execResult.resultado, null, 2)}</pre>
+              <pre className="fm-exec-json">{JSON.stringify(execResult.result, null, 2)}</pre>
             </div>
           )}
         </div>
