@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { bff, setOnUnauthorized } from '../bff'
+import { bff, setAuthConfig, setOnUnauthorized } from '../bff'
 import { saveTokens } from '../../auth/storage'
 
 beforeEach(() => {
@@ -10,6 +10,7 @@ beforeEach(() => {
 afterEach(() => {
   sessionStorage.clear()
   setOnUnauthorized(null)
+  setAuthConfig(null)
 })
 
 function mockFetch(response: Response) {
@@ -43,10 +44,46 @@ describe('bff client', () => {
     await expect(bff.menu()).rejects.toThrow(/500.*ERR.*detalhe/s)
   })
 
-  it('chama onUnauthorized em 401 e ainda lança erro', async () => {
+  it('chama onUnauthorized em 401 (sem authConfig) e lança erro', async () => {
     const handler = vi.fn()
     setOnUnauthorized(handler)
     mockFetch(new Response('nope', { status: 401, statusText: 'Unauthorized' }))
+    await expect(bff.menu()).rejects.toThrow(/401/)
+    expect(handler).toHaveBeenCalledOnce()
+  })
+
+  it('401 com authConfig: refresh bem-sucedido → retenta e retorna dado', async () => {
+    const cfg = { issuerUri: 'https://idp/', clientId: 'spa', scopes: ['openid'] }
+    setAuthConfig(cfg)
+    saveTokens({ accessToken: 'OLD', refreshToken: 'RT', expiresAt: Date.now() + 60_000 })
+
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('nope', { status: 401, statusText: 'Unauthorized' }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ access_token: 'NEW', expires_in: 3600 }), { status: 200 })
+      )
+      .mockResolvedValueOnce(
+        new Response('[{"id":"x","label":"X","icon":"i","uiSchemaUrl":"/u"}]', {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
+
+    const items = await bff.menu()
+    expect(items).toHaveLength(1)
+  })
+
+  it('401 com authConfig: refresh falha → chama onUnauthorized e lança erro', async () => {
+    const cfg = { issuerUri: 'https://idp/', clientId: 'spa', scopes: ['openid'] }
+    setAuthConfig(cfg)
+    saveTokens({ accessToken: 'OLD', refreshToken: 'RT', expiresAt: Date.now() + 60_000 })
+    const handler = vi.fn()
+    setOnUnauthorized(handler)
+
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('nope', { status: 401, statusText: 'Unauthorized' }))
+      .mockResolvedValueOnce(new Response('invalid_grant', { status: 400 }))
+
     await expect(bff.menu()).rejects.toThrow(/401/)
     expect(handler).toHaveBeenCalledOnce()
   })
@@ -81,21 +118,22 @@ describe('bff client', () => {
     expect(f.mock.calls[0][0]).toBe('/bff/flows?page=1&size=50&sort=flowId%2Casc')
   })
 
-  it('flows.create envia YAML como text/plain', async () => {
+  it('flows.create envia YAML como text/yaml', async () => {
     const f = mockFetch(new Response('{}', { status: 200 }))
     await bff.flows.create('id: foo\n')
     const init = f.mock.calls[0][1] as RequestInit
     expect(init.method).toBe('POST')
-    expect((init.headers as Record<string, string>)['Content-Type']).toBe('text/plain')
+    expect((init.headers as Record<string, string>)['Content-Type']).toBe('text/yaml')
     expect(init.body).toBe('id: foo\n')
   })
 
-  it('flows.update PUT em /bff/flows/{id}/versions/{v}', async () => {
+  it('flows.update PUT em /bff/flows/{id}/versions/{v} com text/yaml', async () => {
     const f = mockFetch(new Response('{}', { status: 200 }))
     await bff.flows.update('f1', '1.0', 'yaml')
     const init = f.mock.calls[0][1] as RequestInit
     expect(init.method).toBe('PUT')
     expect(f.mock.calls[0][0]).toBe('/bff/flows/f1/versions/1.0')
+    expect((init.headers as Record<string, string>)['Content-Type']).toBe('text/yaml')
   })
 
   it('flows.execute POST em /bff/flows/{id}/versions/{v}/executions', async () => {

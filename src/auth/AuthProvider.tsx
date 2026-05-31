@@ -7,8 +7,8 @@ import {
   startLogin,
   type AuthConfig,
 } from './oauth'
-import { clearTokens, loadTokens, type StoredTokens } from './storage'
-import { setOnUnauthorized } from '../api/bff'
+import { clearTokens, loadPkceState, loadTokens, type StoredTokens } from './storage'
+import { setAuthConfig, setOnUnauthorized } from '../api/bff'
 
 const REDIRECT_PATH = '/auth/callback'
 
@@ -39,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then(async cfg => {
         if (cancelled) return
         setConfig(cfg)
+        setAuthConfig(cfg)
 
         if (window.location.pathname === REDIRECT_PATH) {
           const params = new URLSearchParams(window.location.search)
@@ -50,12 +51,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return
           }
           try {
+            // Captura returnTo antes de exchangeCodeForTokens limpar o PKCE state
+            const returnTo = loadPkceState()?.returnTo ?? '/'
             const t = await exchangeCodeForTokens(cfg, buildRedirectUri(), code, state)
             if (cancelled) return
             setTokens(t)
             setStatus('authenticated')
-            // Limpa query string e volta para a raiz (returnTo poderia ser usado aqui)
-            window.history.replaceState({}, '', '/')
+            window.history.replaceState({}, '', returnTo)
           } catch (e) {
             setStatus('error')
             setError(e instanceof Error ? e.message : 'Falha no callback')

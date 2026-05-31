@@ -1,5 +1,6 @@
 import type { FlowDefinition, FlowsPage, MenuItem, OrchestrationResponse, UiSchema } from '../types'
 import { loadTokens } from '../auth/storage'
+import { type AuthConfig, refreshTokens } from '../auth/oauth'
 
 const BASE = '/bff'
 
@@ -9,7 +10,13 @@ export function setOnUnauthorized(handler: (() => void) | null): void {
   onUnauthorized = handler
 }
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
+/** Injetado pelo AuthProvider após carregar /bff/auth/config — usado para refresh token em 401. */
+let authConfig: AuthConfig | null = null
+export function setAuthConfig(cfg: AuthConfig | null): void {
+  authConfig = cfg
+}
+
+async function request<T>(path: string, options?: RequestInit, isRetry = false): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options?.headers as Record<string, string> | undefined),
@@ -19,14 +26,24 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     headers['Authorization'] = `Bearer ${tokens.accessToken}`
   }
   const res = await fetch(`${BASE}${path}`, { ...options, headers })
-  if (res.status === 401 && onUnauthorized) {
-    onUnauthorized()
+
+  if (res.status === 401) {
+    if (!isRetry && authConfig) {
+      const refreshed = await refreshTokens(authConfig)
+      if (refreshed) return request<T>(path, options, true)
+    }
+    if (onUnauthorized) onUnauthorized()
   }
+
   if (!res.ok) {
     const body = await res.text()
     throw new Error(`${res.status} ${res.statusText}: ${body}`)
   }
+
   if (res.status === 204) return undefined as T
+
+  const requestHeaders = options?.headers as Record<string, string> | undefined
+  if (requestHeaders?.Accept?.includes('yaml')) return res.text() as unknown as T
   return res.json()
 }
 
@@ -66,33 +83,23 @@ export const bff = {
     get: (flowId: string, version: string): Promise<FlowDefinition> =>
       request(`/flows/${encodeURIComponent(flowId)}/versions/${encodeURIComponent(version)}`),
 
-    getYaml: async (flowId: string, version: string): Promise<string> => {
-      const tokens = loadTokens()
-      const headers: Record<string, string> = { Accept: 'application/x-yaml' }
-      if (tokens?.accessToken) headers['Authorization'] = `Bearer ${tokens.accessToken}`
-      const res = await fetch(
-        `${BASE}/flows/${encodeURIComponent(flowId)}/versions/${encodeURIComponent(version)}/yaml`,
-        { headers }
-      )
-      if (res.status === 401 && onUnauthorized) onUnauthorized()
-      if (!res.ok) {
-        const body = await res.text()
-        throw new Error(`${res.status} ${res.statusText}: ${body}`)
-      }
-      return res.text()
-    },
+    getYaml: (flowId: string, version: string): Promise<string> =>
+      request<string>(
+        `/flows/${encodeURIComponent(flowId)}/versions/${encodeURIComponent(version)}/yaml`,
+        { headers: { Accept: 'application/x-yaml' } }
+      ),
 
     create: (yaml: string): Promise<FlowDefinition> =>
       request('/flows', {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
+        headers: { 'Content-Type': 'text/yaml' },
         body: yaml,
       }),
 
     update: (flowId: string, version: string, yaml: string): Promise<FlowDefinition> =>
       request(`/flows/${encodeURIComponent(flowId)}/versions/${encodeURIComponent(version)}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'text/plain' },
+        headers: { 'Content-Type': 'text/yaml' },
         body: yaml,
       }),
 

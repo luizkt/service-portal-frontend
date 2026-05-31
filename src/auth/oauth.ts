@@ -1,5 +1,5 @@
 import { generateCodeChallenge, generateCodeVerifier, generateRandomString } from './pkce'
-import { clearPkceState, loadPkceState, savePkceState, saveTokens, type StoredTokens } from './storage'
+import { clearPkceState, loadPkceState, loadTokens, savePkceState, saveTokens, type StoredTokens } from './storage'
 
 export interface AuthConfig {
   issuerUri: string
@@ -108,4 +108,40 @@ export function logout(config: AuthConfig, postLogoutRedirectUri: string, idToke
 export function isTokenValid(tokens: StoredTokens | null, skewMs = 30_000): boolean {
   if (!tokens) return false
   return tokens.expiresAt - Date.now() > skewMs
+}
+
+/**
+ * Tenta renovar o accessToken usando o refreshToken armazenado.
+ * Retorna os novos tokens em caso de sucesso, null se não houver refreshToken
+ * ou se o endpoint de renovação falhar.
+ */
+export async function refreshTokens(config: AuthConfig): Promise<StoredTokens | null> {
+  const stored = loadTokens()
+  if (!stored?.refreshToken) return null
+
+  const body = new URLSearchParams({
+    grant_type: 'refresh_token',
+    client_id: config.clientId,
+    refresh_token: stored.refreshToken,
+  })
+
+  try {
+    const res = await fetch(withTrailingSlash(config.issuerUri) + 'token/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    })
+    if (!res.ok) return null
+    const json = (await res.json()) as TokenResponse
+    const tokens: StoredTokens = {
+      accessToken:  json.access_token,
+      idToken:      json.id_token ?? stored.idToken,
+      refreshToken: json.refresh_token ?? stored.refreshToken,
+      expiresAt:    Date.now() + json.expires_in * 1000,
+    }
+    saveTokens(tokens)
+    return tokens
+  } catch {
+    return null
+  }
 }

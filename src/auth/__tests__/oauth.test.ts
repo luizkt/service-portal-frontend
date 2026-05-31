@@ -4,10 +4,11 @@ import {
   fetchAuthConfig,
   isTokenValid,
   logout,
+  refreshTokens,
   startLogin,
   type AuthConfig,
 } from '../oauth'
-import { loadPkceState, loadTokens, savePkceState } from '../storage'
+import { loadPkceState, loadTokens, savePkceState, saveTokens } from '../storage'
 
 const config: AuthConfig = {
   issuerUri: 'https://idp/issuer/',
@@ -174,5 +175,75 @@ describe('isTokenValid', () => {
   })
   it('true quando expira além do skew', () => {
     expect(isTokenValid({ accessToken: 'a', expiresAt: Date.now() + 60_000 }, 30_000)).toBe(true)
+  })
+})
+
+describe('refreshTokens', () => {
+  it('retorna null quando não há refreshToken armazenado', async () => {
+    saveTokens({ accessToken: 'AT', expiresAt: Date.now() + 60_000 })
+    const result = await refreshTokens(config)
+    expect(result).toBeNull()
+  })
+
+  it('retorna null quando sessionStorage está vazio', async () => {
+    const result = await refreshTokens(config)
+    expect(result).toBeNull()
+  })
+
+  it('faz POST no token endpoint, persiste novos tokens e retorna', async () => {
+    saveTokens({ accessToken: 'OLD', refreshToken: 'RT-1', idToken: 'IT-old', expiresAt: Date.now() + 60_000 })
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({ access_token: 'NEW', id_token: 'IT-new', refresh_token: 'RT-2', expires_in: 3600 }),
+        { status: 200 }
+      )
+    )
+
+    const result = await refreshTokens(config)
+
+    expect(result).not.toBeNull()
+    expect(result?.accessToken).toBe('NEW')
+    expect(result?.idToken).toBe('IT-new')
+    expect(result?.refreshToken).toBe('RT-2')
+    expect(result?.expiresAt).toBeGreaterThan(Date.now())
+    expect(loadTokens()).toEqual(result)
+
+    const [url, init] = fetchSpy.mock.calls[0]
+    expect(url).toBe('https://idp/issuer/token/')
+    expect((init as RequestInit).method).toBe('POST')
+    const body = new URLSearchParams((init as RequestInit).body as string)
+    expect(body.get('grant_type')).toBe('refresh_token')
+    expect(body.get('refresh_token')).toBe('RT-1')
+    expect(body.get('client_id')).toBe('spa')
+  })
+
+  it('mantém idToken e refreshToken antigos quando o endpoint não os retorna', async () => {
+    saveTokens({ accessToken: 'OLD', refreshToken: 'RT-original', idToken: 'IT-original', expiresAt: Date.now() + 60_000 })
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({ access_token: 'NEW', expires_in: 3600 }),
+        { status: 200 }
+      )
+    )
+
+    const result = await refreshTokens(config)
+    expect(result?.idToken).toBe('IT-original')
+    expect(result?.refreshToken).toBe('RT-original')
+  })
+
+  it('retorna null sem lançar quando o endpoint retorna erro', async () => {
+    saveTokens({ accessToken: 'OLD', refreshToken: 'RT-1', expiresAt: Date.now() + 60_000 })
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('invalid_grant', { status: 400 }))
+
+    const result = await refreshTokens(config)
+    expect(result).toBeNull()
+  })
+
+  it('retorna null sem lançar quando fetch falha com erro de rede', async () => {
+    saveTokens({ accessToken: 'OLD', refreshToken: 'RT-1', expiresAt: Date.now() + 60_000 })
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Network error'))
+
+    const result = await refreshTokens(config)
+    expect(result).toBeNull()
   })
 })
