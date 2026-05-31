@@ -16,6 +16,17 @@ const config: AuthConfig = {
   scopes: ['openid', 'profile'],
 }
 
+const configWithEndpoints: AuthConfig = {
+  issuerUri: 'https://idp/issuer/',
+  clientId: 'spa',
+  scopes: ['openid', 'profile'],
+  endpoints: {
+    authorize: 'https://idp/authorize/',
+    token: 'https://idp/token/',
+    endSession: 'https://idp/issuer/end-session/',
+  },
+}
+
 beforeEach(() => {
   sessionStorage.clear()
   vi.restoreAllMocks()
@@ -26,17 +37,46 @@ afterEach(() => {
 })
 
 describe('fetchAuthConfig', () => {
-  it('retorna JSON do BFF', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify(config), { status: 200 })
-    )
+  it('busca BFF config e popula endpoints via OIDC discovery', async () => {
+    const bffConfig = { issuerUri: 'https://idp/issuer/', clientId: 'spa', scopes: ['openid'] }
+    const discovery = {
+      authorization_endpoint: 'https://idp/authorize/',
+      token_endpoint: 'https://idp/token/',
+      end_session_endpoint: 'https://idp/issuer/end-session/',
+    }
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify(bffConfig), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(discovery), { status: 200 }))
+
     const cfg = await fetchAuthConfig()
-    expect(cfg).toEqual(config)
-    expect(fetchSpy).toHaveBeenCalledWith('/bff/auth/config')
+
+    expect(fetchSpy).toHaveBeenNthCalledWith(1, '/bff/auth/config')
+    expect(fetchSpy).toHaveBeenNthCalledWith(2, 'https://idp/issuer/.well-known/openid-configuration')
+    expect(cfg.issuerUri).toBe('https://idp/issuer/')
+    expect(cfg.endpoints?.authorize).toBe('https://idp/authorize/')
+    expect(cfg.endpoints?.token).toBe('https://idp/token/')
+    expect(cfg.endpoints?.endSession).toBe('https://idp/issuer/end-session/')
   })
 
-  it('lança erro quando status não é OK', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('', { status: 500 }))
+  it('retorna config sem endpoints quando discovery falha (404)', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify(config), { status: 200 }))
+      .mockResolvedValueOnce(new Response('', { status: 404 }))
+    const cfg = await fetchAuthConfig()
+    expect(cfg.endpoints).toBeUndefined()
+    expect(cfg.issuerUri).toBe(config.issuerUri)
+  })
+
+  it('retorna config sem endpoints quando discovery lança erro de rede', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify(config), { status: 200 }))
+      .mockRejectedValueOnce(new Error('Network error'))
+    const cfg = await fetchAuthConfig()
+    expect(cfg.endpoints).toBeUndefined()
+  })
+
+  it('lança erro quando BFF retorna status não OK', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('', { status: 500 }))
     await expect(fetchAuthConfig()).rejects.toThrow(/500/)
   })
 })
@@ -78,6 +118,17 @@ describe('startLogin', () => {
     await startLogin({ ...config, issuerUri: 'https://idp/issuer' }, 'http://app/auth/callback')
     const url: string = assignSpy.mock.calls[0][0]
     expect(url.startsWith('https://idp/issuer/authorize/?')).toBe(true)
+  })
+
+  it('usa endpoints.authorize quando disponível (OIDC discovery)', async () => {
+    const assignSpy = vi.fn()
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...window.location, assign: assignSpy },
+    })
+    await startLogin(configWithEndpoints, 'http://app/auth/callback')
+    const url: string = assignSpy.mock.calls[0][0]
+    expect(url.startsWith('https://idp/authorize/?')).toBe(true)
   })
 })
 
