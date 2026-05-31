@@ -174,6 +174,38 @@ Todos os métodos lançam `Error` com mensagem `"<status> <statusText>: <body>"`
 
 ---
 
+## Segurança
+
+### Dependências
+
+- **Não instale novos pacotes** sem questionar primeiro se a funcionalidade pode ser implementada nativamente
+- Prefira zero dependências para utilitários simples — três linhas de código são melhores que um pacote inteiro
+- Ao instalar qualquer pacote novo, siga o checklist:
+  - Verificar data da última atualização e downloads semanais (preferir > 100k/semana) no [npmjs.com](https://npmjs.com)
+  - Confirmar que o nome do pacote é exatamente o esperado (evitar typosquatting, ex: `lodahs` vs `lodash`)
+  - Verificar comportamento suspeito em [socket.dev](https://socket.dev)
+  - Rodar `npm audit` após instalar
+- Fixe versões de forma **exata** no `package.json` — sem `^` ou `~` em dependências de produção
+- Nunca remover ou ignorar o `package-lock.json` — ele garante reprodutibilidade entre ambientes
+
+### Variáveis de ambiente
+
+- **Nunca** criar ou commitar arquivos `.env` com segredos reais
+- Usar `.env.example` para documentar variáveis necessárias (sem valores reais)
+- Confirmar que `.env`, `.env.local`, `.env.production` e `.env*.local` estão no `.gitignore`
+
+### Content Security Policy
+
+- Ao modificar o `index.html`, não adicionar `script-src 'unsafe-inline'` ou `script-src 'unsafe-eval'` sem justificativa explícita
+- Bibliotecas carregadas via CDN devem usar o atributo `integrity` (SRI) — gerar o hash em [srihash.org](https://www.srihash.org/)
+
+### Comandos em CI/CD
+
+- Usar `npm ci` em vez de `npm install` em pipelines — garante instalação exata do lockfile
+- Rodar `npm audit --audit-level=high` como gate obrigatório antes do build
+
+---
+
 ## Restrições
 
 - React 18 + TypeScript 5 — não atualizar versões
