@@ -231,7 +231,7 @@ describe('isTokenValid', () => {
 })
 
 describe('loginWithPassword', () => {
-  it('faz POST no token endpoint com grant_type=password, persiste tokens e retorna', async () => {
+  it('faz POST em /bff/auth/login com JSON, persiste tokens e retorna', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(
         JSON.stringify({ access_token: 'AT', id_token: 'IT', refresh_token: 'RT', expires_in: 3600 }),
@@ -248,17 +248,15 @@ describe('loginWithPassword', () => {
     expect(loadTokens()).toEqual(tokens)
 
     const [url, init] = fetchSpy.mock.calls[0]
-    expect(url).toBe('https://idp/token/')
+    expect(url).toBe('/bff/auth/login')
     expect((init as RequestInit).method).toBe('POST')
-    const body = new URLSearchParams((init as RequestInit).body as string)
-    expect(body.get('grant_type')).toBe('password')
-    expect(body.get('username')).toBe('it')
-    expect(body.get('password')).toBe('itadmin')
-    expect(body.get('client_id')).toBe('spa')
-    expect(body.get('scope')).toBe('openid profile')
+    expect((init as RequestInit).headers).toMatchObject({ 'Content-Type': 'application/json' })
+    const body = JSON.parse((init as RequestInit).body as string)
+    expect(body.username).toBe('it')
+    expect(body.password).toBe('itadmin')
   })
 
-  it('usa fallback de URL quando config não tem endpoints', async () => {
+  it('ignora o config passado e sempre usa /bff/auth/login', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(
         JSON.stringify({ access_token: 'AT', expires_in: 3600 }),
@@ -266,19 +264,19 @@ describe('loginWithPassword', () => {
       )
     )
     await loginWithPassword(config, 'workop', 'workoppass')
-    expect(fetchSpy.mock.calls[0][0]).toBe('https://idp/issuer/token/')
+    expect(fetchSpy.mock.calls[0][0]).toBe('/bff/auth/login')
   })
 
-  it('lança erro quando o endpoint retorna status não OK', async () => {
+  it('lança erro com mensagem do BFF quando retorna 401 com JSON', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response('{"error":"invalid_grant"}', { status: 401 })
+      new Response('{"error":"Usuário ou senha inválidos"}', { status: 401 })
     )
     await expect(loginWithPassword(config, 'user', 'wrongpass')).rejects.toThrow('Usuário ou senha inválidos')
   })
 
-  it('lança erro para qualquer status não-2xx', async () => {
+  it('lança erro genérico para status não-2xx sem JSON de erro', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response('bad', { status: 400 })
+      new Response('bad', { status: 500 })
     )
     await expect(loginWithPassword(config, 'u', 'p')).rejects.toThrow('Usuário ou senha inválidos')
   })

@@ -136,27 +136,28 @@ export function isTokenValid(tokens: StoredTokens | null, skewMs = 30_000): bool
   return tokens.expiresAt - Date.now() > skewMs
 }
 
-/** Autentica username/senha diretamente via ROPC (Resource Owner Password Credentials). */
+/**
+ * Autentica username/senha via BFF-proxied login.
+ * O BFF executa o Authentik Flow Executor server-side e retorna tokens OAuth2/OIDC reais.
+ * O parâmetro `config` é mantido para compatibilidade de interface mas não é usado na URL.
+ */
 export async function loginWithPassword(
-  config: AuthConfig,
+  _config: AuthConfig,
   username: string,
   password: string
 ): Promise<StoredTokens> {
-  const tokenUrl = config.endpoints?.token ?? withTrailingSlash(config.issuerUri) + 'token/'
-  const body = new URLSearchParams({
-    grant_type: 'password',
-    client_id: config.clientId,
-    username,
-    password,
-    scope: config.scopes.join(' '),
-  })
-  const res = await fetch(tokenUrl, {
+  const res = await fetch('/bff/auth/login', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: body.toString(),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
   })
   if (!res.ok) {
-    throw new Error('Usuário ou senha inválidos')
+    let message = 'Usuário ou senha inválidos'
+    try {
+      const err = await res.json() as { error?: string }
+      if (err.error) message = err.error
+    } catch { /* ignore parse errors */ }
+    throw new Error(message)
   }
   const json = (await res.json()) as TokenResponse
   const tokens: StoredTokens = {
