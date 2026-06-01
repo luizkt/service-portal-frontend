@@ -3,6 +3,7 @@ import {
   exchangeCodeForTokens,
   fetchAuthConfig,
   isTokenValid,
+  loginWithPassword,
   logout,
   refreshTokens,
   startLogin,
@@ -226,6 +227,60 @@ describe('isTokenValid', () => {
   })
   it('true quando expira além do skew', () => {
     expect(isTokenValid({ accessToken: 'a', expiresAt: Date.now() + 60_000 }, 30_000)).toBe(true)
+  })
+})
+
+describe('loginWithPassword', () => {
+  it('faz POST no token endpoint com grant_type=password, persiste tokens e retorna', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({ access_token: 'AT', id_token: 'IT', refresh_token: 'RT', expires_in: 3600 }),
+        { status: 200 }
+      )
+    )
+
+    const tokens = await loginWithPassword(configWithEndpoints, 'it', 'itadmin')
+
+    expect(tokens.accessToken).toBe('AT')
+    expect(tokens.idToken).toBe('IT')
+    expect(tokens.refreshToken).toBe('RT')
+    expect(tokens.expiresAt).toBeGreaterThan(Date.now())
+    expect(loadTokens()).toEqual(tokens)
+
+    const [url, init] = fetchSpy.mock.calls[0]
+    expect(url).toBe('https://idp/token/')
+    expect((init as RequestInit).method).toBe('POST')
+    const body = new URLSearchParams((init as RequestInit).body as string)
+    expect(body.get('grant_type')).toBe('password')
+    expect(body.get('username')).toBe('it')
+    expect(body.get('password')).toBe('itadmin')
+    expect(body.get('client_id')).toBe('spa')
+    expect(body.get('scope')).toBe('openid profile')
+  })
+
+  it('usa fallback de URL quando config não tem endpoints', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({ access_token: 'AT', expires_in: 3600 }),
+        { status: 200 }
+      )
+    )
+    await loginWithPassword(config, 'workop', 'workoppass')
+    expect(fetchSpy.mock.calls[0][0]).toBe('https://idp/issuer/token/')
+  })
+
+  it('lança erro quando o endpoint retorna status não OK', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('{"error":"invalid_grant"}', { status: 401 })
+    )
+    await expect(loginWithPassword(config, 'user', 'wrongpass')).rejects.toThrow('Usuário ou senha inválidos')
+  })
+
+  it('lança erro para qualquer status não-2xx', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('bad', { status: 400 })
+    )
+    await expect(loginWithPassword(config, 'u', 'p')).rejects.toThrow('Usuário ou senha inválidos')
   })
 })
 

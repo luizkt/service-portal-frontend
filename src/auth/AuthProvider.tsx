@@ -3,12 +3,14 @@ import {
   exchangeCodeForTokens,
   fetchAuthConfig,
   isTokenValid,
+  loginWithPassword,
   logout as oauthLogout,
   startLogin,
   type AuthConfig,
 } from './oauth'
 import { clearTokens, loadPkceState, loadTokens, type StoredTokens } from './storage'
 import { setAuthConfig, setOnUnauthorized } from '../api/bff'
+import { decodeJwtPayload } from './jwt'
 
 const REDIRECT_PATH = '/auth/callback'
 
@@ -16,7 +18,10 @@ interface AuthContextValue {
   status: 'loading' | 'unauthenticated' | 'authenticated' | 'error'
   error: string | null
   accessToken: string | null
+  groups: string[]
+  displayName: string | null
   login: () => void
+  loginWithCredentials: (username: string, password: string) => Promise<void>
   logout: () => void
 }
 
@@ -31,6 +36,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [tokens, setTokens] = useState<StoredTokens | null>(loadTokens())
   const [status, setStatus] = useState<AuthContextValue['status']>('loading')
   const [error, setError] = useState<string | null>(null)
+
+  // Derivados do access token — extraídos a cada render quando tokens mudam
+  const claims = decodeJwtPayload(tokens?.accessToken ?? '')
+  const groups = claims.groups ?? []
+  const displayName = claims.name ?? claims.preferred_username ?? null
 
   // 1) carrega config do BFF; 2) se URL é /auth/callback, troca code por token
   useEffect(() => {
@@ -51,7 +61,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return
           }
           try {
-            // Captura returnTo antes de exchangeCodeForTokens limpar o PKCE state
             const returnTo = loadPkceState()?.returnTo ?? '/'
             const t = await exchangeCodeForTokens(cfg, buildRedirectUri(), code, state)
             if (cancelled) return
@@ -83,6 +92,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void startLogin(config, buildRedirectUri(), window.location.pathname + window.location.search)
   }, [config])
 
+  const loginWithCredentials = useCallback(async (username: string, password: string): Promise<void> => {
+    if (!config) throw new Error('Serviço de autenticação indisponível')
+    const t = await loginWithPassword(config, username, password)
+    setTokens(t)
+    setError(null)
+    setStatus('authenticated')
+  }, [config])
+
   const logout = useCallback(() => {
     const idToken = tokens?.idToken
     clearTokens()
@@ -109,7 +126,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         status,
         error,
         accessToken: tokens?.accessToken ?? null,
+        groups,
+        displayName,
         login,
+        loginWithCredentials,
         logout,
       }}
     >

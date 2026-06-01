@@ -136,6 +136,39 @@ export function isTokenValid(tokens: StoredTokens | null, skewMs = 30_000): bool
   return tokens.expiresAt - Date.now() > skewMs
 }
 
+/** Autentica username/senha diretamente via ROPC (Resource Owner Password Credentials). */
+export async function loginWithPassword(
+  config: AuthConfig,
+  username: string,
+  password: string
+): Promise<StoredTokens> {
+  const tokenUrl = config.endpoints?.token ?? withTrailingSlash(config.issuerUri) + 'token/'
+  const body = new URLSearchParams({
+    grant_type: 'password',
+    client_id: config.clientId,
+    username,
+    password,
+    scope: config.scopes.join(' '),
+  })
+  const res = await fetch(tokenUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body.toString(),
+  })
+  if (!res.ok) {
+    throw new Error('Usuário ou senha inválidos')
+  }
+  const json = (await res.json()) as TokenResponse
+  const tokens: StoredTokens = {
+    accessToken: json.access_token,
+    idToken: json.id_token,
+    refreshToken: json.refresh_token,
+    expiresAt: Date.now() + json.expires_in * 1000,
+  }
+  saveTokens(tokens)
+  return tokens
+}
+
 /**
  * Tenta renovar o accessToken usando o refreshToken armazenado.
  * Retorna os novos tokens em caso de sucesso, null se não houver refreshToken
