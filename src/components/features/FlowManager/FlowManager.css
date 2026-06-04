@@ -54,6 +54,16 @@
   background: #e0e0f0;
 }
 
+.btn-secondary {
+  background: #e8f4fd;
+  color: #1a73e8;
+  border: 1px solid #aad4f5;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #d0eaf9;
+}
+
 .btn-danger {
   background: #fee;
   color: #c0392b;
@@ -295,6 +305,38 @@
 .fm-detail-actions {
   display: flex;
   gap: 10px;
+}
+
+/* Execute form actions */
+.fm-exec-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+/* Comparison layout: v1 and v2 side by side when both have results */
+.fm-exec-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.fm-exec-compare .fm-exec-result {
+  margin-top: 0;
+}
+
+@media (max-width: 800px) {
+  .fm-exec-compare {
+    grid-template-columns: 1fr;
+  }
+}
+
+.fm-exec-status {
+  font-size: 13px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(0,0,0,0.06);
 }
 
 /* Execution result */

@@ -146,6 +146,16 @@ describe('bff client', () => {
     expect(r).toMatchObject({ executionId: 'e1' })
   })
 
+  it('flows.executeV2 POST em /bff/flows/{id}/versions/{v}/executions/v2', async () => {
+    const f = mockFetch(new Response('{"executionId":"e2","status":"SUCCESS"}', { status: 200 }))
+    const r = await bff.flows.executeV2('my-flow', '1.0.0', { y: 2 })
+    expect(f.mock.calls[0][0]).toBe('/bff/flows/my-flow/versions/1.0.0/executions/v2')
+    const init = f.mock.calls[0][1] as RequestInit
+    expect(init.method).toBe('POST')
+    expect(init.body).toBe('{"y":2}')
+    expect(r).toMatchObject({ executionId: 'e2', status: 'SUCCESS' })
+  })
+
   it('flows.getYaml GET com Accept application/x-yaml', async () => {
     saveTokens({ accessToken: 'AT', expiresAt: Date.now() + 60_000 })
     const f = mockFetch(new Response('flow:\n  id: x\n', { status: 200 }))

@@ -115,10 +115,17 @@ export const bff = {
     ): Promise<OrchestrationResponse> =>
       request(
         `/flows/${encodeURIComponent(flowId)}/versions/${encodeURIComponent(version)}/executions`,
-        {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        }
+        { method: 'POST', body: JSON.stringify(payload) }
+      ),
+
+    executeV2: (
+      flowId: string,
+      version: string,
+      payload: Record<string, unknown>
+    ): Promise<OrchestrationResponse> =>
+      request(
+        `/flows/${encodeURIComponent(flowId)}/versions/${encodeURIComponent(version)}/executions/v2`,
+        { method: 'POST', body: JSON.stringify(payload) }
       ),
   },
 }

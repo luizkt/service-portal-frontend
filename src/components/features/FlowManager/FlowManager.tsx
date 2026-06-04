@@ -54,6 +54,8 @@ export function FlowManager({ schema }: Props) {
   const [execPayload, setExecPayload] = useState('{\n  \n}')
   const [execResult, setExecResult] = useState<OrchestrationResponse | null>(null)
   const [executing, setExecuting] = useState(false)
+  const [execResultV2, setExecResultV2] = useState<OrchestrationResponse | null>(null)
+  const [executingV2, setExecutingV2] = useState(false)
 
   const loadFlows = async () => {
     setLoading(true)
@@ -141,26 +143,44 @@ export function FlowManager({ schema }: Props) {
     setView('create')
   }
 
+  const parsePayload = (): Record<string, unknown> | null => {
+    try {
+      return JSON.parse(execPayload)
+    } catch {
+      setError('Payload JSON inválido.')
+      return null
+    }
+  }
+
   const handleExecute = async () => {
     if (!selected) return
+    const payload = parsePayload()
+    if (!payload) return
     setExecuting(true)
     setExecResult(null)
     setError(null)
     try {
-      let payload: Record<string, unknown>
-      try {
-        payload = JSON.parse(execPayload)
-      } catch {
-        setError('Payload JSON inválido.')
-        setExecuting(false)
-        return
-      }
-      const result = await bff.flows.execute(selected.flowId, selected.version, payload)
-      setExecResult(result)
+      setExecResult(await bff.flows.execute(selected.flowId, selected.version, payload))
     } catch (e) {
       setError(String(e))
     } finally {
       setExecuting(false)
+    }
+  }
+
+  const handleExecuteV2 = async () => {
+    if (!selected) return
+    const payload = parsePayload()
+    if (!payload) return
+    setExecutingV2(true)
+    setExecResultV2(null)
+    setError(null)
+    try {
+      setExecResultV2(await bff.flows.executeV2(selected.flowId, selected.version, payload))
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setExecutingV2(false)
     }
   }
 
@@ -228,7 +248,7 @@ export function FlowManager({ schema }: Props) {
                     <td className="fm-date">{formatDate(flow.createdAt)}</td>
                     <td onClick={e => e.stopPropagation()}>
                       <div className="fm-row-actions">
-                        <button className="btn btn-sm btn-ghost" onClick={() => { setSelected(flow); setView('execute'); setExecResult(null) }}>
+                        <button className="btn btn-sm btn-ghost" onClick={() => { setSelected(flow); setView('execute'); setExecResult(null); setExecResultV2(null) }}>
                           ▶ Executar
                         </button>
                         <button className="btn btn-sm btn-danger" onClick={() => handleDelete(flow)}>
@@ -302,7 +322,7 @@ export function FlowManager({ schema }: Props) {
             </div>
           </div>
           <div className="fm-detail-actions">
-            <button className="btn btn-primary" onClick={() => { setView('execute'); setExecResult(null) }}>
+            <button className="btn btn-primary" onClick={() => { setView('execute'); setExecResult(null); setExecResultV2(null) }}>
               ▶ Executar
             </button>
             <button className="btn btn-ghost" onClick={handleEditFromDetail}>
@@ -331,21 +351,44 @@ export function FlowManager({ schema }: Props) {
               rows={10}
               spellCheck={false}
             />
-            <button className="btn btn-primary" onClick={handleExecute} disabled={executing}>
-              {executing ? 'Executando...' : '▶ Executar'}
-            </button>
+            <div className="fm-exec-actions">
+              <button className="btn btn-primary" onClick={handleExecute} disabled={executing || executingV2}>
+                {executing ? 'Executando...' : '▶ v1 Sequencial'}
+              </button>
+              <button className="btn btn-secondary" onClick={handleExecuteV2} disabled={executing || executingV2}>
+                {executingV2 ? 'Executando...' : '▶ v2 Paralelo'}
+              </button>
+            </div>
           </div>
 
-          {execResult && (
-            <div className={`fm-exec-result ${execResult.status === 'SUCCESS' ? 'fm-exec-result--success' : 'fm-exec-result--error'}`}>
-              <div className="fm-exec-result-header">
-                <strong>Status:</strong> {execResult.status}
-                {execResult.executionId && <span className="fm-exec-id">ID: {execResult.executionId}</span>}
-              </div>
-              {execResult.errorMessage && (
-                <div className="fm-exec-error-msg">{execResult.errorMessage}</div>
+          {(execResult || execResultV2) && (
+            <div className="fm-exec-compare">
+              {execResult && (
+                <div className={`fm-exec-result ${execResult.status === 'SUCCESS' ? 'fm-exec-result--success' : 'fm-exec-result--error'}`}>
+                  <div className="fm-exec-result-header">
+                    <strong>v1 — Sequencial</strong>
+                    <span className="fm-exec-status">{execResult.status}</span>
+                    {execResult.executionId && <span className="fm-exec-id">ID: {execResult.executionId}</span>}
+                  </div>
+                  {execResult.errorMessage && (
+                    <div className="fm-exec-error-msg">{execResult.errorMessage}</div>
+                  )}
+                  <pre className="fm-exec-json">{JSON.stringify(execResult.result, null, 2)}</pre>
+                </div>
               )}
-              <pre className="fm-exec-json">{JSON.stringify(execResult.result, null, 2)}</pre>
+              {execResultV2 && (
+                <div className={`fm-exec-result ${execResultV2.status === 'SUCCESS' ? 'fm-exec-result--success' : 'fm-exec-result--error'}`}>
+                  <div className="fm-exec-result-header">
+                    <strong>v2 — Paralelo</strong>
+                    <span className="fm-exec-status">{execResultV2.status}</span>
+                    {execResultV2.executionId && <span className="fm-exec-id">ID: {execResultV2.executionId}</span>}
+                  </div>
+                  {execResultV2.errorMessage && (
+                    <div className="fm-exec-error-msg">{execResultV2.errorMessage}</div>
+                  )}
+                  <pre className="fm-exec-json">{JSON.stringify(execResultV2.result, null, 2)}</pre>
+                </div>
+              )}
             </div>
           )}
         </div>
