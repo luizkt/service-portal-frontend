@@ -36,6 +36,7 @@ export interface OrchestrationResponse {
   flowId: string
   status: string
   result: Record<string, unknown>
+  validations?: Record<string, unknown>
   errorMessage?: string
   startedAt: string
   finishedAt: string

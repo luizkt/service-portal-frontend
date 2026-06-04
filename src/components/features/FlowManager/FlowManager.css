@@ -387,3 +387,17 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+.fm-exec-section-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #666;
+  margin: 12px 0 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.fm-exec-validations {
+  border-left: 3px solid #f59e0b;
+  padding-left: 9px;
+}

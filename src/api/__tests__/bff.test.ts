@@ -146,6 +146,18 @@ describe('bff client', () => {
     expect(r).toMatchObject({ executionId: 'e1' })
   })
 
+  it('flows.execute faz passthrough do campo validations', async () => {
+    const body = JSON.stringify({
+      executionId: 'e3',
+      status: 'SUCCESS',
+      result: { 'validate-client': { active: true } },
+      validations: { 'check-credit-limit': { approved: true } },
+    })
+    mockFetch(new Response(body, { status: 200 }))
+    const r = await bff.flows.execute('my-flow', '1.0.0', { clientId: 'ABC123' })
+    expect(r.validations).toEqual({ 'check-credit-limit': { approved: true } })
+  })
+
   it('flows.executeV2 POST em /bff/flows/{id}/versions/{v}/executions/v2', async () => {
     const f = mockFetch(new Response('{"executionId":"e2","status":"SUCCESS"}', { status: 200 }))
     const r = await bff.flows.executeV2('my-flow', '1.0.0', { y: 2 })

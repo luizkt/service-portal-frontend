@@ -373,7 +373,14 @@ export function FlowManager({ schema }: Props) {
                   {execResult.errorMessage && (
                     <div className="fm-exec-error-msg">{execResult.errorMessage}</div>
                   )}
+                  <h4 className="fm-exec-section-title">Integrações</h4>
                   <pre className="fm-exec-json">{JSON.stringify(execResult.result, null, 2)}</pre>
+                  {execResult.validations && Object.keys(execResult.validations).length > 0 && (
+                    <>
+                      <h4 className="fm-exec-section-title">Validações</h4>
+                      <pre className="fm-exec-json fm-exec-validations">{JSON.stringify(execResult.validations, null, 2)}</pre>
+                    </>
+                  )}
                 </div>
               )}
               {execResultV2 && (
@@ -386,7 +393,14 @@ export function FlowManager({ schema }: Props) {
                   {execResultV2.errorMessage && (
                     <div className="fm-exec-error-msg">{execResultV2.errorMessage}</div>
                   )}
+                  <h4 className="fm-exec-section-title">Integrações</h4>
                   <pre className="fm-exec-json">{JSON.stringify(execResultV2.result, null, 2)}</pre>
+                  {execResultV2.validations && Object.keys(execResultV2.validations).length > 0 && (
+                    <>
+                      <h4 className="fm-exec-section-title">Validações</h4>
+                      <pre className="fm-exec-json fm-exec-validations">{JSON.stringify(execResultV2.validations, null, 2)}</pre>
+                    </>
+                  )}
                 </div>
               )}
             </div>
