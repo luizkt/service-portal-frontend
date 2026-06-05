@@ -1,0 +1,27 @@
+server {
+    listen ${NGINX_PORT};
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    gzip on;
+    gzip_vary on;
+    gzip_types text/plain text/css application/json application/javascript
+               text/xml application/xml text/javascript;
+
+    # Proxy para o BFF — URL configurável por variável de ambiente
+    location /bff/ {
+        proxy_pass         ${BFF_URL}/bff/;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+    }
+
+    # SPA fallback — todas as rotas retornam index.html
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

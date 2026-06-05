@@ -1,0 +1,266 @@
+# =============================================================================
+# service-portal-frontend — Compose ISOLADO
+# =============================================================================
+#
+# O frontend depende apenas do BFF. Este compose sobe a stack completa que o
+# BFF precisa (Authentik + Manager + Orchestrator + infra) + o próprio BFF, e
+# deixa o frontend rodar via `npm run dev` no host (Vite em :5173, proxy /bff
+# para localhost:8081).
+#
+# Se você prefere rodar o frontend containerizado também, use o
+# ../docker-compose-service-portal.yml na raiz.
+#
+# Uso:
+#   docker compose up -d           # sobe BFF + dependências
+#   npm install && npm run dev     # frontend Vite em http://localhost:5173
+#   docker compose down
+# =============================================================================
+
+services:
+
+  postgresql:
+    image: docker.io/library/postgres:16-alpine
+    container_name: frontend-postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
+      start_period: 10s
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    environment:
+      POSTGRES_PASSWORD: ${PG_PASS:-authentik}
+      POSTGRES_USER:     ${PG_USER:-authentik}
+      POSTGRES_DB:       ${PG_DB:-authentik}
+
+  authentik-server:
+    image: ghcr.io/goauthentik/server:2026.2.1
+    container_name: frontend-authentik-server
+    command: server
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - |
+          python3 -c "
+          import urllib.request, sys
+          try:
+            urllib.request.urlopen('http://localhost:9000/-/health/ready/', timeout=5)
+            sys.exit(0)
+          except Exception:
+            sys.exit(1)
+          "
+      start_period: 60s
+      interval: 20s
+      timeout: 10s
+      retries: 5
+    environment:
+      AUTHENTIK_SECRET_KEY:           ${AUTHENTIK_SECRET_KEY:-changeme-dev-only-secret-at-least-50-chars-please-replace-me}
+      AUTHENTIK_POSTGRESQL__HOST:     postgresql
+      AUTHENTIK_POSTGRESQL__USER:     ${PG_USER:-authentik}
+      AUTHENTIK_POSTGRESQL__NAME:     ${PG_DB:-authentik}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${PG_PASS:-authentik}
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    ports:
+      - "${AUTHENTIK_PORT_HTTP:-9000}:9000"
+
+  authentik-worker:
+    image: ghcr.io/goauthentik/server:2026.2.1
+    container_name: frontend-authentik-worker
+    command: worker
+    user: root
+    healthcheck:
+      test: ["CMD", "ak", "healthcheck"]
+      start_period: 30s
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    environment:
+      AUTHENTIK_SECRET_KEY:           ${AUTHENTIK_SECRET_KEY:-changeme-dev-only-secret-at-least-50-chars-please-replace-me}
+      AUTHENTIK_POSTGRESQL__HOST:     postgresql
+      AUTHENTIK_POSTGRESQL__USER:     ${PG_USER:-authentik}
+      AUTHENTIK_POSTGRESQL__NAME:     ${PG_DB:-authentik}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${PG_PASS:-authentik}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      postgresql:
+        condition: service_healthy
+
+  mongodb:
+    image: mongo:7
+    container_name: frontend-mongodb
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping').ok", "--quiet"]
+      start_period: 15s
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    environment:
+      MONGO_INITDB_DATABASE: ${MONGODB_DATABASE:-generic-orchestrator}
+    volumes:
+      - ../generic-orchestrator/mongodb-workflows:/docker-entrypoint-initdb.d:ro
+
+  redis:
+    image: redis:7-alpine
+    container_name: frontend-redis
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: frontend-rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      start_period: 20s
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  kafka:
+    image: bitnami/kafka:3.7
+    container_name: frontend-kafka
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list 2>&1"]
+      start_period: 30s
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    environment:
+      KAFKA_CFG_NODE_ID:                         "1"
+      KAFKA_CFG_PROCESS_ROLES:                   controller,broker
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS:        1@kafka:9093
+      KAFKA_CFG_LISTENERS:                       PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_CFG_ADVERTISED_LISTENERS:            PLAINTEXT://kafka:9092
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP:  CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES:       CONTROLLER
+      ALLOW_PLAINTEXT_LISTENER:                  "yes"
+
+  localstack:
+    image: localstack/localstack:3
+    container_name: frontend-localstack
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:4566/_localstack/health | grep -q '\"sqs\": \"\\(available\\|running\\)\"' || exit 1"]
+      start_period: 20s
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    environment:
+      SERVICES:       sqs
+      DEFAULT_REGION: ${AWS_REGION:-us-east-1}
+
+  wiremock:
+    image: wiremock/wiremock:3.9.1
+    container_name: frontend-wiremock
+    command: ["--port", "8080", "--global-response-templating", "--verbose"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/__admin/health || exit 1"]
+      start_period: 10s
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - ../wiremock/mappings:/home/wiremock/mappings:ro
+      - ../wiremock/__files:/home/wiremock/__files:ro
+    networks:
+      default:
+        aliases:
+          - api.exemplo.com
+
+  manager:
+    build:
+      context: ../service-portal-manager
+      dockerfile: Dockerfile
+    container_name: frontend-manager
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8082/actuator/health || exit 1"]
+      start_period: 60s
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      MONGODB_URI:            mongodb://mongodb:27017/${MONGODB_DATABASE:-generic-orchestrator}
+      MONGODB_DATABASE:       ${MONGODB_DATABASE:-generic-orchestrator}
+      JWT_SECRET:             ${MANAGER_JWT_SECRET:-${ORCHESTRATOR_JWT_SECRET:-CHANGE_ME_PLEASE_THIS_IS_A_DEV_ONLY_SECRET_AT_LEAST_64_CHARS_LONG_FOR_HS512}}
+      MANAGER_ADMIN_USERNAME: ${MANAGER_ADMIN_USERNAME:-admin}
+      MANAGER_ADMIN_PASSWORD: ${MANAGER_ADMIN_PASSWORD:-admin}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
+  orchestrator:
+    build:
+      context: ../generic-orchestrator
+      dockerfile: Dockerfile
+    container_name: frontend-orchestrator
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health || exit 1"]
+      start_period: 60s
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    environment:
+      SPRING_PROFILES_ACTIVE:      docker
+      REDIS_HOST:                  redis
+      RABBITMQ_HOST:               rabbitmq
+      KAFKA_BOOTSTRAP_SERVERS:     kafka:9092
+      KAFKA_BOOTSTRAP_SERVERS_1:   kafka:9092
+      MANAGER_URL:                 http://manager:8082
+      MANAGER_USERNAME:            ${MANAGER_ADMIN_USERNAME:-admin}
+      MANAGER_PASSWORD:            ${MANAGER_ADMIN_PASSWORD:-admin}
+      JWT_SECRET:                  ${ORCHESTRATOR_JWT_SECRET:-CHANGE_ME_PLEASE_THIS_IS_A_DEV_ONLY_SECRET_AT_LEAST_64_CHARS_LONG_FOR_HS512}
+      WORKFLOWS_WARM_UP_ENABLED:   ${WORKFLOWS_WARM_UP_ENABLED:-true}
+      AWS_REGION:                  ${AWS_REGION:-us-east-1}
+      AWS_SQS_ENDPOINT:            http://localstack:4566
+      AWS_ACCESS_KEY_ID:           test
+      AWS_SECRET_ACCESS_KEY:       test
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      wiremock:
+        condition: service_healthy
+      manager:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+
+  bff:
+    build:
+      context: ../service-portal-bff
+      dockerfile: Dockerfile
+    container_name: frontend-bff
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/bff/health || exit 1"]
+      start_period: 45s
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      ORCHESTRATOR_URL:       http://orchestrator:8080
+      ORCHESTRATOR_USERNAME:  ${ORCHESTRATOR_USERNAME:-admin}
+      ORCHESTRATOR_PASSWORD:  ${ORCHESTRATOR_PASSWORD:-admin}
+      MANAGER_URL:            http://manager:8082
+      MANAGER_USERNAME:       ${MANAGER_ADMIN_USERNAME:-admin}
+      MANAGER_PASSWORD:       ${MANAGER_ADMIN_PASSWORD:-admin}
+      AUTHENTIK_JWKS_URI:     http://authentik-server:9000/application/o/${AUTHENTIK_APP_SLUG:-service-portal}/jwks/
+      AUTHENTIK_ISSUER_URI:   http://localhost:${AUTHENTIK_PORT_HTTP:-9000}/application/o/${AUTHENTIK_APP_SLUG:-service-portal}/
+      AUTHENTIK_CLIENT_ID:    ${AUTHENTIK_CLIENT_ID:-service-portal-spa}
+    depends_on:
+      authentik-server:
+        condition: service_healthy
+      orchestrator:
+        condition: service_healthy
+      manager:
+        condition: service_healthy
+    ports:
+      - "${BFF_PORT:-8081}:8081"

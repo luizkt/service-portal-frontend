@@ -1,28 +1,70 @@
-# Angular specific
-/dist/
-/out-tsc/
-/tmp/
-/coverage/
-/e2e/test-output/
-/.angular/
-.angular/
+# =============================================================================
+# React + TypeScript + Vite (Vitest para testes)
+# =============================================================================
 
-# Node modules and dependency files
-/node_modules/
-/package-lock.json
-/yarn.lock
+### Dependências ###
+node_modules/
+.pnp/
+.pnp.js
+.pnp.cjs
+.yarn/install-state.gz
 
-# Environment files
-/.env
+### Build / saídas ###
+dist/
+dist-ssr/
+build/
+out/
+*.local
 
-# Angular CLI and build artefacts
-/.angular-cli.json
-/.ng/
+### Vite ###
+.vite/
+.vite-cache/
 
-# TypeScript cache
+### Vitest / cobertura ###
+coverage/
+*.lcov
+.nyc_output/
+
+### TypeScript ###
 *.tsbuildinfo
+.tscache/
 
-# Logs
+### Logs ###
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+*.log
+logs/
+
+### Variáveis de ambiente locais ###
+# Defaults seguros versionados (.env.example) ficam fora dessa regra
+.env
+.env.local
+.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+### IDEs ###
+.idea/
+*.iml
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+### macOS / Windows / Linux ###
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+*~
+
+### Misc ###
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
