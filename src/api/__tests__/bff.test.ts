@@ -197,4 +197,70 @@ describe('bff client', () => {
     await bff.uiSchema('x')
     expect(f.mock.calls[0][0]).toBe('/bff/features/x/ui-schema')
   })
+
+  // ── recursos modulares (integrations/contracts/validations) ──────────────
+
+  it('integrations.list monta query params page/size/sort/status', async () => {
+    const f = mockFetch(new Response('{"content":[]}', { status: 200 }))
+    await bff.integrations.list({ page: 1, size: 50, sort: 'integrationId,asc', status: 'active' })
+    expect(f.mock.calls[0][0]).toBe('/bff/integrations?page=1&size=50&sort=integrationId%2Casc&status=active')
+  })
+
+  it('integrations.list sem params vai para /bff/integrations', async () => {
+    const f = mockFetch(new Response('[]', { status: 200 }))
+    await bff.integrations.list()
+    expect(f.mock.calls[0][0]).toBe('/bff/integrations')
+  })
+
+  it('integrations.get usa id + version numérico', async () => {
+    const f = mockFetch(new Response('{"integrationId":"vc","version":1}', { status: 200 }))
+    await bff.integrations.get('vc', 1)
+    expect(f.mock.calls[0][0]).toBe('/bff/integrations/vc/versions/1')
+  })
+
+  it('integrations.listVersions inclui status quando presente', async () => {
+    const f = mockFetch(new Response('[]', { status: 200 }))
+    await bff.integrations.listVersions('vc', 'inactive')
+    expect(f.mock.calls[0][0]).toBe('/bff/integrations/vc/versions?status=inactive')
+  })
+
+  it('integrations.listVersions sem status', async () => {
+    const f = mockFetch(new Response('[]', { status: 200 }))
+    await bff.integrations.listVersions('vc')
+    expect(f.mock.calls[0][0]).toBe('/bff/integrations/vc/versions')
+  })
+
+  it('integrations.create POST com body JSON', async () => {
+    const f = mockFetch(new Response('{"integrationId":"vc","version":1}', { status: 201 }))
+    await bff.integrations.create({ integrationId: 'vc' })
+    expect(f.mock.calls[0][0]).toBe('/bff/integrations')
+    const init = f.mock.calls[0][1] as RequestInit
+    expect(init.method).toBe('POST')
+    expect(init.body).toBe('{"integrationId":"vc"}')
+  })
+
+  it('integrations.update PUT em versions/{v}', async () => {
+    const f = mockFetch(new Response('{"version":2}', { status: 201 }))
+    await bff.integrations.update('vc', 1, { url: 'http://x' })
+    expect(f.mock.calls[0][0]).toBe('/bff/integrations/vc/versions/1')
+    expect((f.mock.calls[0][1] as RequestInit).method).toBe('PUT')
+  })
+
+  it('integrations.delete DELETE em versions/{v} (204 → void)', async () => {
+    const f = mockFetch(new Response(null, { status: 204 }))
+    const r = await bff.integrations.delete('vc', 1)
+    expect(r).toBeUndefined()
+    expect(f.mock.calls[0][0]).toBe('/bff/integrations/vc/versions/1')
+    expect((f.mock.calls[0][1] as RequestInit).method).toBe('DELETE')
+  })
+
+  it('contracts e validations usam seus próprios paths', async () => {
+    const f1 = mockFetch(new Response('{"content":[]}', { status: 200 }))
+    await bff.contracts.get('co', 2)
+    expect(f1.mock.calls[0][0]).toBe('/bff/contracts/co/versions/2')
+
+    const f2 = mockFetch(new Response('{"content":[]}', { status: 200 }))
+    await bff.validations.create({ validationId: 'vl' })
+    expect(f2.mock.calls[0][0]).toBe('/bff/validations')
+  })
 })

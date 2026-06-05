@@ -41,3 +41,65 @@ export interface OrchestrationResponse {
   startedAt: string
   finishedAt: string
 }
+
+/** Envelope Spring Data Page genérico para os recursos modulares. */
+export interface ResourcePage<T> {
+  content: T[]
+  totalElements: number
+  totalPages: number
+  number: number
+  size: number
+}
+
+export interface IntegrationDefinition {
+  integrationId: string
+  version: number
+  type: string
+  url: string
+  method: string
+  headers: Record<string, string>
+  timeout: number
+  bodyTemplate: string | null
+  responseBody: Record<string, unknown> | null
+  active: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+/** Mesma forma de IntegrationDefinition (validações pós-integrações). */
+export interface ValidationDefinition {
+  validationId: string
+  version: number
+  type: string
+  url: string
+  method: string
+  headers: Record<string, string>
+  timeout: number
+  bodyTemplate: string | null
+  responseBody: Record<string, unknown> | null
+  active: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface FieldValidation {
+  type: string
+  value?: string
+  message?: string
+}
+
+export interface ContractField {
+  name: string
+  type: string
+  required: boolean
+  validations: FieldValidation[]
+}
+
+export interface ContractDefinition {
+  contractId: string
+  version: number
+  fields: ContractField[]
+  active: boolean
+  createdAt: string
+  updatedAt: string
+}

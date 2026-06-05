@@ -1,4 +1,14 @@
-import type { FlowDefinition, FlowsPage, MenuItem, OrchestrationResponse, UiSchema } from '../types'
+import type {
+  ContractDefinition,
+  FlowDefinition,
+  FlowsPage,
+  IntegrationDefinition,
+  MenuItem,
+  OrchestrationResponse,
+  ResourcePage,
+  UiSchema,
+  ValidationDefinition,
+} from '../types'
 import { loadTokens } from '../auth/storage'
 import { type AuthConfig, refreshTokens } from '../auth/oauth'
 
@@ -52,6 +62,50 @@ export interface ListFlowsParams {
   size?: number
   sort?: string
   status?: 'active' | string
+}
+
+export interface ListResourceParams {
+  page?: number
+  size?: number
+  sort?: string
+  status?: 'active' | 'inactive' | string
+}
+
+/**
+ * Fábrica de cliente para os recursos modulares (integrations/contracts/validations).
+ * Os três compartilham a mesma forma REST no BFF; `version` é numérico (sequencial).
+ */
+function resourceApi<T>(resource: string) {
+  const base = `/${resource}`
+  return {
+    list: (params: ListResourceParams = {}): Promise<ResourcePage<T> | T[]> => {
+      const qs = new URLSearchParams()
+      if (params.page != null) qs.set('page', String(params.page))
+      if (params.size != null) qs.set('size', String(params.size))
+      if (params.sort) qs.set('sort', params.sort)
+      if (params.status) qs.set('status', params.status)
+      const suffix = qs.toString() ? `?${qs.toString()}` : ''
+      return request(`${base}${suffix}`)
+    },
+
+    get: (id: string, version: number): Promise<T> =>
+      request(`${base}/${encodeURIComponent(id)}/versions/${version}`),
+
+    listVersions: (id: string, status?: string): Promise<T[]> =>
+      request(`${base}/${encodeURIComponent(id)}/versions${status ? `?status=${status}` : ''}`),
+
+    create: (body: unknown): Promise<T> =>
+      request(base, { method: 'POST', body: JSON.stringify(body) }),
+
+    update: (id: string, version: number, body: unknown): Promise<T> =>
+      request(`${base}/${encodeURIComponent(id)}/versions/${version}`, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      }),
+
+    delete: (id: string, version: number): Promise<void> =>
+      request(`${base}/${encodeURIComponent(id)}/versions/${version}`, { method: 'DELETE' }),
+  }
 }
 
 /**
@@ -128,4 +182,8 @@ export const bff = {
         { method: 'POST', body: JSON.stringify(payload) }
       ),
   },
+
+  integrations: resourceApi<IntegrationDefinition>('integrations'),
+  contracts: resourceApi<ContractDefinition>('contracts'),
+  validations: resourceApi<ValidationDefinition>('validations'),
 }
