@@ -95,6 +95,11 @@ export interface ContractField {
   validations: FieldValidation[]
 }
 
+export interface FlowExample {
+  example: Record<string, unknown>
+  fields: ContractField[]
+}
+
 export interface ContractDefinition {
   contractId: string
   version: number

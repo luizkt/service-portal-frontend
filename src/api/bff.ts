@@ -1,6 +1,7 @@
 import type {
   ContractDefinition,
   FlowDefinition,
+  FlowExample,
   FlowsPage,
   IntegrationDefinition,
   MenuItem,
@@ -161,6 +162,9 @@ export const bff = {
       request(`/flows/${encodeURIComponent(flowId)}/versions/${encodeURIComponent(version)}`, {
         method: 'DELETE',
       }),
+
+    getExample: (flowId: string, version: string): Promise<FlowExample> =>
+      request(`/flows/${encodeURIComponent(flowId)}/versions/${encodeURIComponent(version)}/examples`),
 
     execute: (
       flowId: string,

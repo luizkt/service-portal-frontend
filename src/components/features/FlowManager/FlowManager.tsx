@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { bff } from '../../../api/bff'
-import type { FlowDefinition, FlowsPage, OrchestrationResponse, UiSchema } from '../../../types'
+import type { ContractField, FlowDefinition, FlowsPage, OrchestrationResponse, UiSchema } from '../../../types'
 import '../../../styles/management.css'
 import './FlowManager.css'
 
@@ -57,6 +57,7 @@ export function FlowManager({ schema }: Props) {
   const [executing, setExecuting] = useState(false)
   const [execResultV2, setExecResultV2] = useState<OrchestrationResponse | null>(null)
   const [executingV2, setExecutingV2] = useState(false)
+  const [exampleFields, setExampleFields] = useState<ContractField[]>([])
 
   const loadFlows = async () => {
     setLoading(true)
@@ -142,6 +143,21 @@ export function FlowManager({ schema }: Props) {
       )
     }
     setView('create')
+  }
+
+  const openExecute = async (flow: FlowDefinition) => {
+    setSelected(flow)
+    setExecResult(null)
+    setExecResultV2(null)
+    setExampleFields([])
+    setView('execute')
+    try {
+      const ex = await bff.flows.getExample(flow.flowId, flow.version)
+      setExampleFields(ex.fields)
+      if (ex.fields.length > 0) {
+        setExecPayload(JSON.stringify(ex.example, null, 2))
+      }
+    } catch (_) {}
   }
 
   const parsePayload = (): Record<string, unknown> | null => {
@@ -249,7 +265,7 @@ export function FlowManager({ schema }: Props) {
                     <td className="fm-date">{formatDate(flow.createdAt)}</td>
                     <td onClick={e => e.stopPropagation()}>
                       <div className="fm-row-actions">
-                        <button className="btn btn-sm btn-ghost" onClick={() => { setSelected(flow); setView('execute'); setExecResult(null); setExecResultV2(null) }}>
+                        <button className="btn btn-sm btn-ghost" onClick={() => openExecute(flow)}>
                           ▶ Executar
                         </button>
                         <button className="btn btn-sm btn-danger" onClick={() => handleDelete(flow)}>
@@ -323,7 +339,7 @@ export function FlowManager({ schema }: Props) {
             </div>
           </div>
           <div className="fm-detail-actions">
-            <button className="btn btn-primary" onClick={() => { setView('execute'); setExecResult(null); setExecResultV2(null) }}>
+            <button className="btn btn-primary" onClick={() => openExecute(selected)}>
               ▶ Executar
             </button>
             <button className="btn btn-ghost" onClick={handleEditFromDetail}>
@@ -343,6 +359,31 @@ export function FlowManager({ schema }: Props) {
             Executar: <span className="fm-flow-id">{selected.flowId}</span>{' '}
             <span className="fm-badge">{selected.version}</span>
           </h2>
+
+          {exampleFields.length > 0 && (
+            <div className="fm-contract-ref">
+              <h3 className="fm-contract-ref-title">Contrato de entrada</h3>
+              <table className="fm-table fm-contract-table">
+                <thead>
+                  <tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr>
+                </thead>
+                <tbody>
+                  {exampleFields.map(f => (
+                    <tr key={f.name}>
+                      <td className="fm-flow-id">{f.name}</td>
+                      <td><span className="fm-badge">{f.type}</span></td>
+                      <td>
+                        <span className={`fm-status ${f.required ? 'fm-status--active' : 'fm-status--inactive'}`}>
+                          {f.required ? 'Sim' : 'Não'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
           <div className="fm-execute-form">
             <label className="fm-label">Payload (JSON)</label>
             <textarea
