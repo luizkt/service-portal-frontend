@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ResourcePage } from '../../../types'
+import '../../../styles/management.css'
 import './ResourceManager.css'
 
 /** Item mínimo comum aos recursos modulares (integrations/contracts/validations). */
@@ -31,7 +32,7 @@ export interface ResourceConfig<T extends ResourceItem> {
   canWrite?: boolean
 }
 
-type View = 'list' | 'create' | 'detail' | 'versions'
+type View = 'list' | 'create' | 'detail' | 'versions' | 'edit'
 
 function isPage<T>(x: ResourcePage<T> | T[]): x is ResourcePage<T> {
   return !Array.isArray(x) && typeof (x as ResourcePage<T>).content !== 'undefined'
@@ -54,6 +55,7 @@ export function ResourceManager<T extends ResourceItem>({ config, title }: Props
   const [error, setError] = useState<string | null>(null)
 
   const [json, setJson] = useState(config.template)
+  const [editJson, setEditJson] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
   const idOf = (item: T): string => String((item as Record<string, unknown>)[idField])
@@ -85,6 +87,28 @@ export function ResourceManager<T extends ResourceItem>({ config, title }: Props
       await load()
       setView('list')
       setJson(config.template)
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const openEdit = () => {
+    if (!selected) return
+    setEditJson(JSON.stringify(selected, null, 2))
+    setView('edit')
+  }
+
+  const handleUpdate = async () => {
+    if (!selected) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      const body = JSON.parse(editJson)
+      await api.update(idOf(selected), selected.version, body)
+      await load()
+      setView('list')
     } catch (e) {
       setError(String(e))
     } finally {
@@ -129,15 +153,15 @@ export function ResourceManager<T extends ResourceItem>({ config, title }: Props
   return (
     <div className="rm">
       <div className="rm-header">
-        <h2>{title}</h2>
+        <h2 className="rm-title">{title}</h2>
         {view === 'list' && canWrite && (
-          <button className="rm-btn" onClick={() => { setJson(config.template); setView('create') }}>
-            Nova {label}
+          <button className="btn btn-primary" onClick={() => { setJson(config.template); setView('create') }}>
+            + Nova {label}
           </button>
         )}
         {view !== 'list' && (
-          <button className="rm-btn rm-btn-secondary" onClick={() => setView('list')}>
-            Voltar
+          <button className="btn btn-ghost" onClick={() => setView('list')}>
+            ← Voltar
           </button>
         )}
       </div>
@@ -152,20 +176,23 @@ export function ResourceManager<T extends ResourceItem>({ config, title }: Props
         ) : (
           <table className="rm-table">
             <thead>
-              <tr><th>ID</th><th>Versão</th><th>Ativo</th><th>Criado em</th><th></th></tr>
+              <tr><th>ID</th><th>Versão</th><th>Status</th><th>Criado em</th><th></th></tr>
             </thead>
             <tbody>
               {items.map((item) => (
-                <tr key={`${idOf(item)}-${item.version}`}>
-                  <td>{idOf(item)}</td>
-                  <td>{item.version}</td>
-                  <td>{item.active ? 'Sim' : 'Não'}</td>
-                  <td>{item.createdAt}</td>
-                  <td className="rm-actions">
-                    <button className="rm-link" onClick={() => openDetail(item)}>Detalhe</button>
-                    <button className="rm-link" onClick={() => openVersions(item)}>Versões</button>
+                <tr key={`${idOf(item)}-${item.version}`} className="rm-table-row" onClick={() => openDetail(item)}>
+                  <td className="mgmt-id">{idOf(item)}</td>
+                  <td><span className="mgmt-badge">{item.version}</span></td>
+                  <td>
+                    <span className={`mgmt-status ${item.active ? 'mgmt-status--active' : 'mgmt-status--inactive'}`}>
+                      {item.active ? 'Ativo' : 'Inativo'}
+                    </span>
+                  </td>
+                  <td className="mgmt-date">{item.createdAt}</td>
+                  <td className="rm-actions" onClick={(e) => e.stopPropagation()}>
+                    <button className="btn btn-sm btn-ghost" onClick={() => openVersions(item)}>Versões</button>
                     {canWrite && (
-                      <button className="rm-link rm-danger" onClick={() => handleDelete(item)}>Desativar</button>
+                      <button className="btn btn-sm btn-danger" onClick={() => handleDelete(item)}>Desativar</button>
                     )}
                   </td>
                 </tr>
@@ -177,10 +204,11 @@ export function ResourceManager<T extends ResourceItem>({ config, title }: Props
 
       {view === 'create' && (
         <div className="rm-form">
-          <label>JSON da {label}</label>
+          <h3 className="rm-form-title">Nova {label}</h3>
+          <p className="rm-form-hint">Informe o JSON do recurso abaixo.</p>
           <textarea className="rm-textarea" value={json} onChange={(e) => setJson(e.target.value)} rows={18} />
           <div className="rm-form-actions">
-            <button className="rm-btn" disabled={submitting} onClick={handleCreate}>
+            <button className="btn btn-primary" disabled={submitting} onClick={handleCreate}>
               {submitting ? 'Enviando…' : 'Criar'}
             </button>
           </div>
@@ -189,22 +217,59 @@ export function ResourceManager<T extends ResourceItem>({ config, title }: Props
 
       {view === 'detail' && selected && (
         <div className="rm-detail">
-          <h3>{idOf(selected)} — v{selected.version}</h3>
-          <pre className="rm-json">{JSON.stringify(selected, null, 2)}</pre>
+          <div className="rm-detail-header">
+            <h3 className="rm-form-title">
+              <span className="mgmt-id">{idOf(selected)}</span>
+              {' — '}
+              <span className="mgmt-badge">v{selected.version}</span>
+            </h3>
+            {canWrite && (
+              <button className="btn btn-ghost" onClick={openEdit}>Editar</button>
+            )}
+          </div>
+          <pre className="mgmt-code">{JSON.stringify(selected, null, 2)}</pre>
+        </div>
+      )}
+
+      {view === 'edit' && selected && (
+        <div className="rm-form">
+          <h3 className="rm-form-title">
+            Editar <span className="mgmt-id">{idOf(selected)}</span>
+            {' — v'}{selected.version}
+          </h3>
+          <p className="rm-edit-note">Uma nova versão será criada e a atual desativada. O ID não pode ser alterado.</p>
+          <textarea
+            className="rm-textarea"
+            value={editJson}
+            onChange={(e) => setEditJson(e.target.value)}
+            rows={18}
+          />
+          <div className="rm-form-actions">
+            <button className="btn btn-primary" disabled={submitting} onClick={handleUpdate}>
+              {submitting ? 'Salvando…' : 'Salvar nova versão'}
+            </button>
+            <button className="btn btn-ghost" onClick={() => setView('detail')}>
+              Cancelar
+            </button>
+          </div>
         </div>
       )}
 
       {view === 'versions' && selected && (
         <div className="rm-detail">
-          <h3>Versões de {idOf(selected)}</h3>
+          <h3 className="rm-form-title">Versões de <span className="mgmt-id">{idOf(selected)}</span></h3>
           <table className="rm-table">
-            <thead><tr><th>Versão</th><th>Ativo</th><th>Criado em</th></tr></thead>
+            <thead><tr><th>Versão</th><th>Status</th><th>Criado em</th></tr></thead>
             <tbody>
               {versions.map((v) => (
                 <tr key={v.version}>
-                  <td>{v.version}</td>
-                  <td>{v.active ? 'Sim' : 'Não'}</td>
-                  <td>{v.createdAt}</td>
+                  <td><span className="mgmt-badge">{v.version}</span></td>
+                  <td>
+                    <span className={`mgmt-status ${v.active ? 'mgmt-status--active' : 'mgmt-status--inactive'}`}>
+                      {v.active ? 'Ativo' : 'Inativo'}
+                    </span>
+                  </td>
+                  <td className="mgmt-date">{v.createdAt}</td>
                 </tr>
               ))}
             </tbody>
