@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { bff } from '../../../api/bff'
 import type { FlowDefinition, FlowsPage, OrchestrationResponse, UiSchema } from '../../../types'
+import '../../../styles/management.css'
 import './FlowManager.css'
 
 interface Props {
