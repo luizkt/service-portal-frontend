@@ -1,5 +1,7 @@
 # Service Portal Frontend
 
+[![CI](https://github.com/luizkt/service-portal-frontend/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/luizkt/service-portal-frontend/actions/workflows/ci.yml?query=branch%3Amain)
+
 Frontend do Service Portal, baseado em React 18 + TypeScript + Vite 5.
 
 ## Visão Geral
