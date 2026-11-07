@@ -105,6 +105,8 @@ npm run coverage             # relatório em coverage/index.html
 
 Não há script de lint.
 
+CI (`ci.yml`): `build` e `docker-build` (buildx sem push, cache gha, smoke `curl /`) em paralelo; depois `test` (coverage); `agents-index` roda desde o início; `open-pr` precisa de `test` e `agents-index`.
+
 ## Armadilhas
 
 - Sem biblioteca de UI, sem estado global, sem `fetch` fora de `bff.ts` (exceção: `oauth.ts`). Não atualizar React 18 nem TypeScript 5.
