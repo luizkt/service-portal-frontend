@@ -28,12 +28,13 @@ O `AGENTS.md` na raiz deste repositório é o índice que agentes leem antes de 
 4. Rode (da raiz do repositório):
 
    ```bash
+   python3 .claude/skills/update-agents-index/repo-index.py write .
    python3 .claude/skills/update-agents-index/repo-index.py check .
    ```
 
    Corrija todo `ERRO` (caminho citado que não existe, bloco gerado desatualizado). Para aviso de arquivo sem citação, cite a classe ou cubra com glob.
 
-   Este repositório é TypeScript: o script só valida os caminhos citados e o orçamento de tokens. Não existe bloco `gen:size` nem `write`. Atualize à mão a linha `Tamanho:` (contagem de arquivos `.ts` e `.tsx` em `src`, de teste e casos) e a data `atualizado-em` no `index:meta`. O aviso `bloco gen:size ausente` é esperado.
+   O `write` atualiza o bloco `gen:size` (contagem de arquivos `.ts` e `.tsx` em `src`, de teste e casos) e a data `atualizado-em`. Não edite esse bloco à mão.
 
 ## Regras de escrita
 
