@@ -1,215 +1,117 @@
 # AGENTS.md — service-portal-frontend
 
-Guia de contexto para agentes de IA trabalhando neste componente.
+Índice para agentes de IA. Leia antes de abrir código. Método: `docs/plans/PLAN-repo-indexing.md` no monorepo.
 
----
+<!-- index:meta
+repo: service-portal-frontend
+tipo: spa-react (Server Driven UI, fala só com o BFF)
+fonte-de-verdade: package.json, vite.config.ts, src/api/bff.ts, src/types/index.ts
+atualizado-em: 2026-11-07
+-->
 
-## Stack
+## Resumo
 
-| Item | Versão |
+SPA que renderiza o que o BFF descreve: o menu vem de GET /bff/menu e o schema de cada tela vem de GET /bff/features/{id}/ui-schema. Não tem regra de negócio nem roteador: a tela ativa é estado do `App`. Fala somente com o BFF, nunca com Manager ou Orchestrator.
+
+Tamanho: 24 arquivos .ts e .tsx em `src`, dos quais 6 de teste (87 casos).
+
+Stack: React 18.3, TypeScript 5.6, Vite 5, Vitest 2 com jsdom. CSS puro, sem biblioteca de UI nem gerenciador de estado, `fetch` nativo. Porta dev 5173, porta no Docker 80 (nginx).
+
+## Telas
+
+A navegação não usa URL, exceto `/auth/callback`.
+
+| Tela | Auth | Arquivo |
+|---|---|---|
+| Login (usuário e senha) | público | `src/components/Login/LoginPage.tsx` |
+| Callback OIDC | público | `src/auth/AuthProvider.tsx` |
+| Menu lateral | token | `src/components/Sidebar/Sidebar.tsx`, montado em `src/App.tsx` |
+| flow-manager | token | `src/components/features/FlowManager/FlowManager.tsx` (listar, criar, ver, executar v1 e v2) |
+| integration-manager | escrita ADMIN | `src/components/features/IntegrationManager/IntegrationManager.tsx` |
+| contract-manager | escrita ADMIN, WORKFLOWS | `src/components/features/ContractManager/ContractManager.tsx` |
+| validation-manager | escrita ADMIN, RULES | `src/components/features/ValidationManager/ValidationManager.tsx` |
+
+Os três últimos só configuram `ResourceManager` (listar, criar, detalhe, versões, editar). O `type` do schema escolhe a tela em `componentMap`, em `src/components/ComponentRenderer/ComponentRenderer.tsx`. A permissão real é do BFF; o front só esconde botões com `canWrite`.
+
+## Chamadas ao BFF
+
+Cliente único: `src/api/bff.ts` (base /bff). Exceção: `src/auth/oauth.ts` chama /bff/auth/config e /bff/auth/login, além do IdP.
+
+| Método | Endpoint |
 |---|---|
-| React | 18.3 |
-| TypeScript | 5.6 |
-| Bundler | Vite 5 |
-| Testes | Vitest 2 + jsdom + @testing-library/react |
-| Porta dev | 5173 |
-| Porta prod (Docker) | 80 |
+| `bff.menu`, `bff.uiSchema` | GET /menu, GET /features/{id}/ui-schema |
+| `bff.flows.list`, `get`, `getYaml` | GET /flows[?page&size&sort&status], /flows/{id}/versions/{v}[/yaml] |
+| `bff.flows.create`, `update`, `delete` | POST /flows, PUT e DELETE /flows/{id}/versions/{v} (corpo YAML) |
+| `bff.flows.getExample` | GET /flows/{id}/versions/{v}/examples |
+| `bff.flows.execute`, `executeV2` | POST /flows/{id}/versions/{v}/executions e /executions/v2 |
+| `bff.integrations`, `contracts`, `validations` | `resourceApi`: list, get, listVersions, create, update, delete em /{recurso}[/{id}/versions/{n}] |
 
----
+## Fluxo
 
-## Responsabilidade
+1. `src/main.tsx` monta `AuthProvider` e `App`. O provider busca /bff/auth/config, faz discovery OIDC e, se a URL é /auth/callback, troca o code por tokens (PKCE S256).
+2. Login normal: `LoginPage` chama `loginWithCredentials`, que posta em /bff/auth/login. `startLogin` (redirect PKCE) existe, mas nenhuma tela o chama.
+3. Tokens ficam em `sessionStorage` (`src/auth/storage.ts`). `groups` e `displayName` saem do JWT por `src/auth/jwt.ts`.
+4. `App` só carrega o menu quando `status` é `authenticated`. Ao escolher um item, busca o ui-schema e entrega a `ComponentRenderer`. Erro 403 vira mensagem de acesso negado.
+5. `request`, em `bff.ts`, injeta o Bearer. Em 401 tenta `refreshTokens` uma vez; se falhar, chama `onUnauthorized` e a sessão cai.
+6. Edição: `FlowManager` envia o YAML inteiro em PUT. `ResourceManager` edita o JSON do item e chama `api.update(id, version, body)`.
 
-O frontend é uma **SPA React com Server Driven UI**: o BFF controla quais features existem (menu) e qual schema de UI cada feature usa. O frontend não tem regras de negócio — só renderiza o que o BFF descreve.
+## Mapa
 
-Regras fixas:
-- Toda comunicação HTTP passa pelo módulo `src/api/bff.ts` — nunca `fetch` direto em componentes
-- Nenhuma biblioteca de UI externa (sem Material UI, Ant Design, Chakra, etc.) — apenas CSS puro
-- Sem gerenciador de estado externo — `useState` e `useEffect` nativos do React
+| Caminho | Papel |
+|---|---|
+| `src/main.tsx`, `src/App.tsx` | Entrada, gate de auth, menu, schema ativo, usuário e grupo |
+| `src/api/bff.ts` | Cliente HTTP, `resourceApi`, setters `setOnUnauthorized` e `setAuthConfig` |
+| `src/auth/*` | `AuthProvider` (`useAuth`), `oauth`, `pkce`, `storage`, `jwt` |
+| `src/components/features/ResourceManager/*` | UI genérica de recurso versionado, recebe `ResourceConfig` |
+| `src/components/features/*` | Uma tela por tipo de schema |
+| `src/components/*` | `ComponentRenderer` (despacho por type), `Sidebar`, `Login` |
+| `src/types/index.ts` | Tipos do contrato com o BFF |
+| `src/styles/*`, `src/*.css` | Estilo compartilhado das telas de gestão, global e da casca |
+| `src/test/setup.ts` | Setup do Vitest; testes ficam em `__tests__` ao lado do código |
 
----
+Fora de `src`: `vite.config.ts` (proxy, testes, cobertura), `nginx/*`, `docker-entrypoint.sh`, `Dockerfile`.
 
-## Autenticação — OAuth2/PKCE (Authorization Code + S256)
+## Quero mudar... onde
 
-O fluxo é implementado em `src/auth/` sem bibliotecas externas:
+| Mudança | Onde |
+|---|---|
+| Nova tela | O BFF devolve menu e ui-schema. Crie o componente em `src/components/features/` e registre o type em `componentMap` (`ComponentRenderer.tsx`) |
+| Novo recurso versionado | Componente fino como `ContractManager.tsx` (`idField`, `template`, `canWrite`), `resourceApi<T>` em `src/api/bff.ts`, tipo em `src/types/index.ts` |
+| Nova chamada ao BFF | Método em `bff` (`src/api/bff.ts`) e teste em `src/api/__tests__/bff.test.ts` |
+| Quem escreve numa tela | `canWrite` no componente do recurso (o enforce real é do BFF) |
+| Validação de formulário | `parsePayload` em `FlowManager.tsx`; `JSON.parse` em `handleCreate` e `handleUpdate` de `ResourceManager.tsx`. Não há biblioteca de formulário |
+| Template inicial de criação | `TEMPLATE` no `*Manager.tsx` do recurso; `FLOW_TEMPLATE` em `FlowManager.tsx` |
+| Layout e estilo | `src/App.tsx` e `src/*.css` (casca), `src/styles/*` (gestão) |
+| Rótulo de grupo | `GROUP_LABELS` em `src/App.tsx` |
+| Login, refresh, logout | `loginWithPassword`, `refreshTokens`, `logout` em `src/auth/oauth.ts`; estado em `src/auth/AuthProvider.tsx` |
+| URL do BFF ou porta | Dev: `server.proxy` em `vite.config.ts`. Docker: `BFF_URL` e `NGINX_PORT` |
+| Gate de cobertura | `test.coverage` em `vite.config.ts` |
 
-1. `AuthProvider` carrega `GET /bff/auth/config` (issuer, client_id, scopes)
-2. `startLogin` gera code_verifier/state via Web Crypto API, persiste em `sessionStorage` e redireciona para `/authorize`
-3. No callback (`/auth/callback`), `exchangeCodeForTokens` valida o state (anti-CSRF), troca o code pelo token via `POST /token`
-4. Tokens ficam em `sessionStorage` (somem ao fechar a aba, sobrevivem a reload)
-5. `bff.ts` injeta `Authorization: Bearer <token>` automaticamente em todas as requisições
-6. Em resposta 401 do BFF, `AuthProvider` derruba a sessão e volta para o estado `unauthenticated`
+## Config
 
----
+- Sem variáveis VITE_: o código usa o caminho relativo /bff.
+- Dev: proxy de /bff para http://localhost:8081 em `vite.config.ts`.
+- Docker: `BFF_URL` (padrão http://localhost:8081) e `NGINX_PORT` (padrão 80), aplicadas por `docker-entrypoint.sh` no template de `nginx/*`.
+- Dev com WireMock: `docker-compose-frontend-dev.yml`. Stack completa: `../docker-compose-service-portal.yml`.
 
-## Estrutura de arquivos
-
-```
-src/
-├── api/
-│   └── bff.ts                  # único cliente HTTP — todos os paths do BFF centralizados aqui
-├── auth/
-│   ├── AuthProvider.tsx        # Context React: status (loading|unauthenticated|authenticated|error)
-│   ├── oauth.ts                # fetchAuthConfig, startLogin, exchangeCodeForTokens, logout, isTokenValid
-│   ├── pkce.ts                 # Web Crypto API: generateCodeVerifier, generateCodeChallenge, generateRandomString
-│   └── storage.ts              # sessionStorage: saveTokens/loadTokens/clearTokens, savePkceState/loadPkceState
-├── components/
-│   ├── ComponentRenderer/
-│   │   └── ComponentRenderer.tsx   # mapa de type → componente React; renderiza a feature correta
-│   ├── features/
-│   │   └── FlowManager/
-│   │       └── FlowManager.tsx     # CRUD de workflows YAML + executor de fluxos com payload JSON
-│   └── Sidebar/
-│       └── Sidebar.tsx             # sidebar populada via GET /bff/menu
-├── types/
-│   └── index.ts                # MenuItem, UiSchema, FlowDefinition, FlowsPage, OrchestrationResponse
-├── App.tsx                     # gate de autenticação + botão "Sair" na sidebar
-└── main.tsx                    # entrada: <AuthProvider><App /></AuthProvider>
-```
-
----
-
-## Como rodar localmente
-
-### Pré-requisitos
-
-- Node.js (versão compatível com Vite 5)
-- BFF rodando em `localhost:8081` (ou via Docker)
-
-### Dev server
+## Comandos
 
 ```bash
-cd service-portal-frontend
-npm install
-npm run dev       # http://localhost:5173
+npm install && npm run dev   # http://localhost:5173, exige o BFF em :8081
+npm run build                # tsc -b && vite build, saída em dist/
+npm test                     # vitest run; npm run test:watch para watch
+npm run coverage             # relatório em coverage/index.html
 ```
 
-O Vite faz proxy de `/bff/*` para `http://localhost:8081` — sem CORS em dev.
+Não há script de lint.
 
-### Build de produção
+## Armadilhas
 
-```bash
-npm run build     # saída em dist/
-npm run preview   # serve o build localmente
-```
-
-### Docker
-
-```bash
-docker build -t service-portal-frontend:local .
-# ou via stack completa:
-docker compose -f docker-compose-service-portal.yml up -d
-```
-
----
-
-## Como testar
-
-```bash
-cd service-portal-frontend
-
-# Testes (modo CI — executa uma vez)
-npm test
-
-# Testes em modo watch
-npm run test:watch
-
-# Testes + relatório de cobertura
-npm run coverage
-# Relatório em: coverage/index.html
-```
-
-### Gate de cobertura
-
-Gate ≥ 95% em lines/functions/branches/statements, aplicado apenas sobre:
-- `src/auth/**/*.ts`
-- `src/api/**/*.ts`
-
-Cobertura atual: **100%** (44 testes).
-
-Componentes React (`ComponentRenderer`, `FlowManager`, `Sidebar`, `App`) não estão no gate — são testados manualmente via browser.
-
----
-
-## Módulo `bff.ts` — API pública
-
-```typescript
-bff.menu()                                    // GET /bff/menu → MenuItem[]
-bff.uiSchema(featureId)                       // GET /bff/features/{id}/ui-schema → UiSchema
-bff.flows.list(params?)                       // GET /bff/flows[?page&size&sort&status] → FlowsPage | FlowDefinition[]
-bff.flows.get(flowId, version)                // GET /bff/flows/{id}/versions/{v} → FlowDefinition
-bff.flows.getYaml(flowId, version)            // GET /bff/flows/{id}/versions/{v}/yaml → string
-bff.flows.create(yaml)                        // POST /bff/flows (text/plain) → FlowDefinition
-bff.flows.update(flowId, version, yaml)       // PUT /bff/flows/{id}/versions/{v} (text/plain) → FlowDefinition
-bff.flows.delete(flowId, version)             // DELETE /bff/flows/{id}/versions/{v} → void
-bff.flows.execute(flowId, version, payload)   // POST /bff/flows/{id}/versions/{v}/executions → OrchestrationResponse
-```
-
-Todos os métodos lançam `Error` com mensagem `"<status> <statusText>: <body>"` em respostas não-OK.
-
----
-
-## Como adicionar uma nova feature (Server Driven UI)
-
-1. O BFF precisa retornar o novo item em `GET /bff/menu` e em `GET /bff/features/{novoId}/ui-schema`
-2. Criar o componente em `src/components/features/NovaFeature/NovaFeature.tsx`
-3. Registrar no mapa de `ComponentRenderer.tsx`:
-   ```typescript
-   case 'nova-feature': return <NovaFeature schema={schema} />
-   ```
-4. O `type` no schema retornado pelo BFF deve bater com o `case` acima
-
----
-
-## Decisões de design
-
-**Sem bibliotecas de UI.** Apenas CSS puro — não instalar Material UI, Ant Design, Tailwind, etc.
-
-**Sem gerenciador de estado global.** `useState`/`useEffect` são suficientes para a complexidade atual. Não adicionar Redux, Zustand, Jotai, etc. sem necessidade clara.
-
-**`fetch` nativo, centralizado em `bff.ts`.** O interceptor de 401 e a injeção do Bearer token ficam em um único lugar. Componentes não chamam `fetch` diretamente.
-
-**Tokens em `sessionStorage`.** Escolha deliberada: tokens somem ao fechar a aba (menor janela de exposição), mas sobrevivem a reload. `localStorage` foi descartado por manter tokens indefinidamente.
-
-**Proxy Vite em dev.** `vite.config.ts` redireciona `/bff/*` para `localhost:8081`. Em produção (Docker), Nginx faz o mesmo proxy. Não há hardcoded de URL do BFF no código.
-
----
-
-## Segurança
-
-### Dependências
-
-- **Não instale novos pacotes** sem questionar primeiro se a funcionalidade pode ser implementada nativamente
-- Prefira zero dependências para utilitários simples — três linhas de código são melhores que um pacote inteiro
-- Ao instalar qualquer pacote novo, siga o checklist:
-  - Verificar data da última atualização e downloads semanais (preferir > 100k/semana) no [npmjs.com](https://npmjs.com)
-  - Confirmar que o nome do pacote é exatamente o esperado (evitar typosquatting, ex: `lodahs` vs `lodash`)
-  - Verificar comportamento suspeito em [socket.dev](https://socket.dev)
-  - Rodar `npm audit` após instalar
-- Fixe versões de forma **exata** no `package.json` — sem `^` ou `~` em dependências de produção
-- Nunca remover ou ignorar o `package-lock.json` — ele garante reprodutibilidade entre ambientes
-
-### Variáveis de ambiente
-
-- **Nunca** criar ou commitar arquivos `.env` com segredos reais
-- Usar `.env.example` para documentar variáveis necessárias (sem valores reais)
-- Confirmar que `.env`, `.env.local`, `.env.production` e `.env*.local` estão no `.gitignore`
-
-### Content Security Policy
-
-- Ao modificar o `index.html`, não adicionar `script-src 'unsafe-inline'` ou `script-src 'unsafe-eval'` sem justificativa explícita
-- Bibliotecas carregadas via CDN devem usar o atributo `integrity` (SRI) — gerar o hash em [srihash.org](https://www.srihash.org/)
-
-### Comandos em CI/CD
-
-- Usar `npm ci` em vez de `npm install` em pipelines — garante instalação exata do lockfile
-- Rodar `npm audit --audit-level=high` como gate obrigatório antes do build
-
----
-
-## Restrições
-
-- React 18 + TypeScript 5 — não atualizar versões
-- Sem bibliotecas de UI externas
-- Sem gerenciador de estado externo
-- Toda comunicação HTTP via `src/api/bff.ts` — sem `fetch` direto em componentes
-- Frontend fala **somente** com o BFF — nunca com orquestrador ou manager diretamente
+- Sem biblioteca de UI, sem estado global, sem `fetch` fora de `bff.ts` (exceção: `oauth.ts`). Não atualizar React 18 nem TypeScript 5.
+- Dependência nova só com justificativa e versão exata (o `package.json` usa `^`: não propague). Em pipeline use `npm ci`.
+- O gate de 95% cobre só `src/auth/**/*.ts` e `src/api/**/*.ts`. Mudou `auth` ou `api`: mude o teste.
+- Tokens ficam em `sessionStorage` de propósito. Não use `localStorage`.
+- `bff.ts` e `AuthProvider` se ligam por setters de módulo. Sem o provider montado, refresh e logout em 401 não funcionam.
+- `request` só devolve texto se o header `Accept` contém yaml; senão faz `res.json()`.
+- Fluxos enviam YAML e têm `version` string; os recursos modulares enviam JSON e têm `version` numérica.
+- Nunca commite `.env` com segredo nem `unsafe-inline` ou `unsafe-eval` no `index.html`.
