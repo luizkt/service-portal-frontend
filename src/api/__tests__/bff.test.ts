@@ -259,6 +259,9 @@ describe('bff client', () => {
     await bff.contracts.get('co', 2)
     expect(f1.mock.calls[0][0]).toBe('/bff/contracts/co/versions/2')
 
+    // vitest >= 4: spyOn num método já espionado reutiliza o mesmo mock; limpa as chamadas
+    // para que f2.mock.calls[0] seja de fato a chamada de validations.
+    f1.mockClear()
     const f2 = mockFetch(new Response('{"content":[]}', { status: 200 }))
     await bff.validations.create({ validationId: 'vl' })
     expect(f2.mock.calls[0][0]).toBe('/bff/validations')
