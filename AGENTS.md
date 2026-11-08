@@ -106,7 +106,7 @@ npm run coverage             # relatório em coverage/index.html
 
 Não há script de lint.
 
-CI (`ci.yml`): `build` e `docker-build` (buildx sem push, cache gha, smoke `curl /`) em paralelo; depois `test` (coverage); `agents-index` roda desde o início; `open-pr` precisa de `test` e `agents-index`.
+CI (`ci.yml`): `build`, `docker-build` (buildx sem push, cache gha, smoke `curl /` e checagem do header CSP) e `agents-index` rodam em paralelo; `test` (coverage) só espera `build`; `open-pr` precisa de `test`, `docker-build` e `agents-index`.
 
 ## Armadilhas
 
