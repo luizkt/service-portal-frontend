@@ -20,7 +20,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],
-      include: ['src/auth/**/*.ts', 'src/api/**/*.ts'],
+      include: ['src/auth/**/*.ts', 'src/auth/**/*.tsx', 'src/api/**/*.ts'],
       thresholds: {
         lines: 95,
         functions: 95,
