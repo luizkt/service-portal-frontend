@@ -13,7 +13,8 @@ export function decodeJwtPayload(token: string): JwtClaims {
     if (parts.length !== 3) return {}
     const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/')
     const padded = payload + '='.repeat((4 - (payload.length % 4)) % 4)
-    return JSON.parse(atob(padded)) as JwtClaims
+    const bytes = Uint8Array.from(atob(padded), c => c.charCodeAt(0))
+    return JSON.parse(new TextDecoder().decode(bytes)) as JwtClaims
   } catch {
     return {}
   }
