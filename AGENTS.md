@@ -15,7 +15,7 @@ SPA que renderiza o que o BFF descreve: o menu vem de GET /bff/menu e o schema d
 
 <!-- gen:size -->Tamanho: 24 arquivos .ts e .tsx em `src`, dos quais 6 de teste (87 casos).<!-- /gen:size -->
 
-Stack: React 18.3, TypeScript 5.6, Vite 5, Vitest 2 com jsdom. CSS puro, sem biblioteca de UI nem gerenciador de estado, `fetch` nativo. Porta dev 5173, porta no Docker 80 (nginx).
+Stack: React 18.3, TypeScript 5.9, Vite 8, Vitest 3 com jsdom. CSS puro, sem biblioteca de UI nem gerenciador de estado, `fetch` nativo. Porta dev 5173, porta no Docker 80 (nginx).
 
 ## Telas
 
