@@ -13,7 +13,7 @@ atualizado-em: 2026-11-07
 
 SPA que renderiza o que o BFF descreve: o menu vem de GET /bff/menu e o schema de cada tela vem de GET /bff/features/{id}/ui-schema. Não tem regra de negócio nem roteador: a tela ativa é estado do `App`. Fala somente com o BFF, nunca com Manager ou Orchestrator.
 
-<!-- gen:size -->Tamanho: 24 arquivos .ts e .tsx em `src`, dos quais 6 de teste (89 casos).<!-- /gen:size -->
+<!-- gen:size -->Tamanho: 24 arquivos .ts e .tsx em `src`, dos quais 6 de teste (90 casos).<!-- /gen:size -->
 
 Stack: React 18.3, TypeScript 5.6, Vite 5, Vitest 2 com jsdom. CSS puro, sem biblioteca de UI nem gerenciador de estado, `fetch` nativo. Porta dev 5173, porta no Docker 80 (nginx).
 
@@ -115,6 +115,7 @@ CI (`ci.yml`): `build` e `docker-build` (buildx sem push, cache gha, smoke `curl
 - Tokens ficam em `sessionStorage` de propósito. Não use `localStorage`.
 - `bff.ts` e `AuthProvider` se ligam por setters de módulo. Sem o provider montado, refresh e logout em 401 não funcionam.
 - Refresh em 401 é single-flight (`refreshInFlight` em `bff.ts`): não chame `refreshTokens` direto de outro lugar, o refresh_token pode ser rotacionado pelo IdP.
+- `returnTo` do callback passa por `sanitizeReturnTo` (`storage.ts`): só caminho relativo começando com `/`, senão `/`.
 - `request` só devolve texto se o header `Accept` contém yaml; senão faz `res.json()`.
 - Fluxos enviam YAML e têm `version` string; os recursos modulares enviam JSON e têm `version` numérica.
 - Nunca commite `.env` com segredo nem `unsafe-inline` ou `unsafe-eval` no `index.html`.
