@@ -83,7 +83,7 @@ Fora de `src`: `vite.config.ts` (proxy, testes, cobertura), `nginx/*`, `docker-e
 | Template inicial de criação | `TEMPLATE` no `*Manager.tsx` do recurso; `FLOW_TEMPLATE` em `FlowManager.tsx` |
 | Layout e estilo | `src/App.tsx` e `src/*.css` (casca), `src/styles/*` (gestão) |
 | Rótulo de grupo | `GROUP_LABELS` em `src/App.tsx` |
-| Login, refresh, logout | `loginWithPassword`, `refreshTokens`, `logout` em `src/auth/oauth.ts`; estado em `src/auth/AuthProvider.tsx` |
+| Login, refresh, logout | `loginWithPassword`, `refreshTokens`, `logout` em `src/auth/oauth.ts`; estado em `src/auth/AuthProvider.tsx` (teste em `src/auth/__tests__/AuthProvider.test.tsx`) |
 | URL do BFF ou porta | Dev: `server.proxy` em `vite.config.ts`. Docker: `BFF_URL` e `NGINX_PORT` |
 | Gate de cobertura | `test.coverage` em `vite.config.ts` |
 
@@ -112,7 +112,7 @@ CI (`ci.yml`): `build`, `docker-build` (buildx sem push, cache gha, smoke `curl 
 
 - Sem biblioteca de UI, sem estado global, sem `fetch` fora de `bff.ts` (exceção: `oauth.ts`). Não atualizar React 18 nem TypeScript 5.
 - Dependência nova só com justificativa e versão exata (o `package.json` usa `^`: não propague). Em pipeline use `npm ci`.
-- O gate de 95% cobre só `src/auth/**/*.ts` e `src/api/**/*.ts`. Mudou `auth` ou `api`: mude o teste.
+- O gate de 95% cobre `src/auth/**/*.ts`, `src/auth/**/*.tsx` (inclui `AuthProvider.tsx`) e `src/api/**/*.ts`. Mudou `auth` ou `api`: mude o teste. Sem teste e fora do gate: `FlowManager`, `App`, `ComponentRenderer` e os demais gerenciadores (só `ResourceManager` tem).
 - Tokens ficam em `sessionStorage` de propósito. Não use `localStorage`.
 - `bff.ts` e `AuthProvider` se ligam por setters de módulo. Sem o provider montado, refresh e logout em 401 não funcionam.
 - Refresh em 401 é single-flight (`refreshInFlight` em `bff.ts`): não chame `refreshTokens` direto de outro lugar, o refresh_token pode ser rotacionado pelo IdP.
