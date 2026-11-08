@@ -2,3 +2,10 @@
 node_modules
 dist
 *.md
+coverage
+.github
+.claude
+.githooks
+.gitignore
+docker-compose*.yml
+tsconfig.tsbuildinfo
