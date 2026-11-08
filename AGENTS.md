@@ -13,7 +13,7 @@ atualizado-em: 2026-11-07
 
 SPA que renderiza o que o BFF descreve: o menu vem de GET /bff/menu e o schema de cada tela vem de GET /bff/features/{id}/ui-schema. Não tem regra de negócio nem roteador: a tela ativa é estado do `App`. Fala somente com o BFF, nunca com Manager ou Orchestrator.
 
-<!-- gen:size -->Tamanho: 24 arquivos .ts e .tsx em `src`, dos quais 6 de teste (88 casos).<!-- /gen:size -->
+<!-- gen:size -->Tamanho: 24 arquivos .ts e .tsx em `src`, dos quais 6 de teste (89 casos).<!-- /gen:size -->
 
 Stack: React 18.3, TypeScript 5.6, Vite 5, Vitest 2 com jsdom. CSS puro, sem biblioteca de UI nem gerenciador de estado, `fetch` nativo. Porta dev 5173, porta no Docker 80 (nginx).
 
@@ -52,7 +52,7 @@ Cliente único: `src/api/bff.ts` (base /bff). Exceção: `src/auth/oauth.ts` cha
 2. Login normal: `LoginPage` chama `loginWithCredentials`, que posta em /bff/auth/login. `startLogin` (redirect PKCE) existe, mas nenhuma tela o chama.
 3. Tokens ficam em `sessionStorage` (`src/auth/storage.ts`). `groups` e `displayName` saem do JWT por `src/auth/jwt.ts` (decodifica base64url e UTF-8, para nomes com acento).
 4. `App` só carrega o menu quando `status` é `authenticated`. Ao escolher um item, busca o ui-schema e entrega a `ComponentRenderer`. Erro 403 vira mensagem de acesso negado.
-5. `request`, em `bff.ts`, injeta o Bearer. Em 401 tenta `refreshTokens` uma vez; se falhar, chama `onUnauthorized` e a sessão cai.
+5. `request`, em `bff.ts`, injeta o Bearer. Em 401 tenta `refreshTokens` uma vez (single-flight: 401s concorrentes compartilham um refresh só, `refreshOnce`); se falhar, chama `onUnauthorized` e a sessão cai.
 6. Edição: `FlowManager` envia o YAML inteiro em PUT. `ResourceManager` edita o JSON do item e chama `api.update(id, version, body)`.
 
 ## Mapa
@@ -114,6 +114,7 @@ CI (`ci.yml`): `build` e `docker-build` (buildx sem push, cache gha, smoke `curl
 - O gate de 95% cobre só `src/auth/**/*.ts` e `src/api/**/*.ts`. Mudou `auth` ou `api`: mude o teste.
 - Tokens ficam em `sessionStorage` de propósito. Não use `localStorage`.
 - `bff.ts` e `AuthProvider` se ligam por setters de módulo. Sem o provider montado, refresh e logout em 401 não funcionam.
+- Refresh em 401 é single-flight (`refreshInFlight` em `bff.ts`): não chame `refreshTokens` direto de outro lugar, o refresh_token pode ser rotacionado pelo IdP.
 - `request` só devolve texto se o header `Accept` contém yaml; senão faz `res.json()`.
 - Fluxos enviam YAML e têm `version` string; os recursos modulares enviam JSON e têm `version` numérica.
 - Nunca commite `.env` com segredo nem `unsafe-inline` ou `unsafe-eval` no `index.html`.
