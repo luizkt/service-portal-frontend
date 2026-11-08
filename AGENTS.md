@@ -91,7 +91,8 @@ Fora de `src`: `vite.config.ts` (proxy, testes, cobertura), `nginx/*`, `docker-e
 
 - Sem variáveis VITE_: o código usa o caminho relativo /bff.
 - Dev: proxy de /bff para http://localhost:8081 em `vite.config.ts`.
-- Docker: `BFF_URL` (padrão http://localhost:8081) e `NGINX_PORT` (padrão 80), aplicadas por `docker-entrypoint.sh` no template de `nginx/*`.
+- Docker: `BFF_URL` (padrão http://localhost:8081), `NGINX_PORT` (padrão 80) e `CSP_CONNECT_SRC_EXTRA` (padrão http://localhost:9000, origem do IdP em `connect-src` da CSP), aplicadas por `docker-entrypoint.sh` nos templates de `nginx/*` (`default.conf.template` e `security-headers.conf.template`).
+- nginx envia nosniff, Referrer-Policy e CSP estrita (sem inline); `/assets/` tem cache imutável de 1 ano e `index.html` `no-cache`.
 - Dev com WireMock: `docker-compose-frontend-dev.yml`. Stack completa: `../docker-compose-service-portal.yml`.
 
 ## Comandos
@@ -118,4 +119,5 @@ CI (`ci.yml`): `build` e `docker-build` (buildx sem push, cache gha, smoke `curl
 - `returnTo` do callback passa por `sanitizeReturnTo` (`storage.ts`): só caminho relativo começando com `/`, senão `/`.
 - `request` só devolve texto se o header `Accept` contém yaml; senão faz `res.json()`.
 - Fluxos enviam YAML e têm `version` string; os recursos modulares enviam JSON e têm `version` numérica.
+- Em produção defina `CSP_CONNECT_SRC_EXTRA` com a origem real do IdP, senão o navegador bloqueia discovery e token. `add_header` em `location` substitui os herdados: por isso o snippet `security-headers.conf` é incluído em cada location que declara cabeçalhos.
 - Nunca commite `.env` com segredo nem `unsafe-inline` ou `unsafe-eval` no `index.html`.
