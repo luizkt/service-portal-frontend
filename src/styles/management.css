@@ -113,3 +113,16 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* Botão na primeira célula da linha: alcançável por teclado, visual de texto */
+.row-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.row-link:hover { text-decoration: underline; }
+.row-link:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }

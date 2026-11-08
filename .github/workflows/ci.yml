@@ -58,10 +58,11 @@ jobs:
           done
           docker logs fe
           [ "${ok:-}" = 1 ]
+          curl -sI http://localhost:8080/ | grep -i '^Content-Security-Policy:'
 
   test:
     name: testes com gate de cobertura
-    needs: [build, docker-build]
+    needs: [build]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -88,7 +89,7 @@ jobs:
 
   open-pr:
     name: abrir PR para main
-    needs: [test, agents-index]
+    needs: [test, docker-build, agents-index]
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/feature/')
     runs-on: ubuntu-latest
     timeout-minutes: 5

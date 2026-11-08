@@ -58,7 +58,7 @@ export function LoginPage() {
               placeholder="••••••••"
             />
           </div>
-          {displayError && <p className="login-error">{displayError}</p>}
+          {displayError && <p className="login-error" role="alert">{displayError}</p>}
           <button
             type="submit"
             className="login-btn"

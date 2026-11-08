@@ -5,6 +5,7 @@ import {
   loadPkceState,
   loadTokens,
   savePkceState,
+  sanitizeReturnTo,
   saveTokens,
 } from '../storage'
 
@@ -56,4 +57,18 @@ describe('pkce state', () => {
     clearPkceState()
     expect(loadPkceState()).toBeNull()
   })
+})
+
+describe('sanitizeReturnTo', () => {
+  it('mantém caminhos relativos do próprio site', () => {
+    expect(sanitizeReturnTo('/')).toBe('/')
+    expect(sanitizeReturnTo('/flows?x=1#a')).toBe('/flows?x=1#a')
+  })
+
+  it.each(['//evil.com', '/\\evil.com', 'https://evil.com', 'javascript:alert(1)', '', undefined, 42])(
+    'rejeita %s e cai em "/"',
+    value => {
+      expect(sanitizeReturnTo(value)).toBe('/')
+    }
+  )
 })

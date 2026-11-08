@@ -8,7 +8,7 @@ import {
   startLogin,
   type AuthConfig,
 } from './oauth'
-import { clearTokens, loadPkceState, loadTokens, type StoredTokens } from './storage'
+import { clearTokens, loadPkceState, loadTokens, sanitizeReturnTo, type StoredTokens } from './storage'
 import { setAuthConfig, setOnUnauthorized } from '../api/bff'
 import { decodeJwtPayload } from './jwt'
 
@@ -61,7 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return
           }
           try {
-            const returnTo = loadPkceState()?.returnTo ?? '/'
+            const returnTo = sanitizeReturnTo(loadPkceState()?.returnTo)
             const t = await exchangeCodeForTokens(cfg, buildRedirectUri(), code, state)
             if (cancelled) return
             setTokens(t)
