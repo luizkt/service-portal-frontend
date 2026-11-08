@@ -117,6 +117,7 @@ CI (`ci.yml`): `build` e `docker-build` (buildx sem push, cache gha, smoke `curl
 - `bff.ts` e `AuthProvider` se ligam por setters de módulo. Sem o provider montado, refresh e logout em 401 não funcionam.
 - Refresh em 401 é single-flight (`refreshInFlight` em `bff.ts`): não chame `refreshTokens` direto de outro lugar, o refresh_token pode ser rotacionado pelo IdP.
 - `returnTo` do callback passa por `sanitizeReturnTo` (`storage.ts`): só caminho relativo começando com `/`, senão `/`.
+- Acessibilidade: erros usam `role="alert"`, carregando `role="status"`, o menu é `<nav aria-label>` com `aria-current`, e a primeira célula das tabelas tem um `button.row-link` (o clique na linha continua como atalho; o botão faz `stopPropagation`).
 - `request` só devolve texto se o header `Accept` contém yaml; senão faz `res.json()`.
 - Fluxos enviam YAML e têm `version` string; os recursos modulares enviam JSON e têm `version` numérica.
 - Em produção defina `CSP_CONNECT_SRC_EXTRA` com a origem real do IdP, senão o navegador bloqueia discovery e token. `add_header` em `location` substitui os herdados: por isso o snippet `security-headers.conf` é incluído em cada location que declara cabeçalhos.

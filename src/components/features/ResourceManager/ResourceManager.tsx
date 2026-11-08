@@ -166,7 +166,7 @@ export function ResourceManager<T extends ResourceItem>({ config, title }: Props
         )}
       </div>
 
-      {error && <div className="rm-error">{error}</div>}
+      {error && <div className="rm-error" role="alert">{error}</div>}
 
       {view === 'list' && (
         loading ? (
@@ -181,7 +181,15 @@ export function ResourceManager<T extends ResourceItem>({ config, title }: Props
             <tbody>
               {items.map((item) => (
                 <tr key={`${idOf(item)}-${item.version}`} className="rm-table-row" onClick={() => openDetail(item)}>
-                  <td className="mgmt-id">{idOf(item)}</td>
+                  <td className="mgmt-id">
+                    <button
+                      type="button"
+                      className="row-link"
+                      onClick={(e) => { e.stopPropagation(); openDetail(item) }}
+                    >
+                      {idOf(item)}
+                    </button>
+                  </td>
                   <td><span className="mgmt-badge">{item.version}</span></td>
                   <td>
                     <span className={`mgmt-status ${item.active ? 'mgmt-status--active' : 'mgmt-status--inactive'}`}>
@@ -206,7 +214,7 @@ export function ResourceManager<T extends ResourceItem>({ config, title }: Props
         <div className="rm-form">
           <h3 className="rm-form-title">Nova {label}</h3>
           <p className="rm-form-hint">Informe o JSON do recurso abaixo.</p>
-          <textarea className="rm-textarea" value={json} onChange={(e) => setJson(e.target.value)} rows={18} />
+          <textarea className="rm-textarea" aria-label={`JSON da ${label}`} value={json} onChange={(e) => setJson(e.target.value)} rows={18} />
           <div className="rm-form-actions">
             <button className="btn btn-primary" disabled={submitting} onClick={handleCreate}>
               {submitting ? 'Enviando…' : 'Criar'}
@@ -240,6 +248,7 @@ export function ResourceManager<T extends ResourceItem>({ config, title }: Props
           <p className="rm-edit-note">Uma nova versão será criada e a atual desativada. O ID não pode ser alterado.</p>
           <textarea
             className="rm-textarea"
+            aria-label={`JSON da ${label}`}
             value={editJson}
             onChange={(e) => setEditJson(e.target.value)}
             rows={18}

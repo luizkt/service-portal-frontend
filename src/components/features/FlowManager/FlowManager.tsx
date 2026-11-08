@@ -227,9 +227,9 @@ export function FlowManager({ schema }: Props) {
       </div>
 
       {error && (
-        <div className="fm-error">
+        <div className="fm-error" role="alert">
           <strong>Erro:</strong> {error}
-          <button className="fm-error-close" onClick={() => setError(null)}>✕</button>
+          <button className="fm-error-close" aria-label="Fechar mensagem de erro" onClick={() => setError(null)}>✕</button>
         </div>
       )}
 
@@ -259,7 +259,15 @@ export function FlowManager({ schema }: Props) {
               <tbody>
                 {flows.map(flow => (
                   <tr key={flowKey(flow)} onClick={() => handleViewDetail(flow)} className="fm-table-row">
-                    <td className="fm-flow-id">{flow.flowId}</td>
+                    <td className="fm-flow-id">
+                      <button
+                        type="button"
+                        className="row-link"
+                        onClick={e => { e.stopPropagation(); handleViewDetail(flow) }}
+                      >
+                        {flow.flowId}
+                      </button>
+                    </td>
                     <td>{flow.description ?? '—'}</td>
                     <td><span className="fm-badge">{flow.version}</span></td>
                     <td className="fm-date">{formatDate(flow.createdAt)}</td>
@@ -288,6 +296,7 @@ export function FlowManager({ schema }: Props) {
           <p className="fm-form-hint">Cole ou edite o YAML do fluxo abaixo.</p>
           <textarea
             className="fm-yaml-editor"
+            aria-label="YAML do fluxo"
             value={yaml}
             onChange={e => setYaml(e.target.value)}
             rows={24}
@@ -385,8 +394,9 @@ export function FlowManager({ schema }: Props) {
           )}
 
           <div className="fm-execute-form">
-            <label className="fm-label">Payload (JSON)</label>
+            <label className="fm-label" htmlFor="fm-exec-payload">Payload (JSON)</label>
             <textarea
+              id="fm-exec-payload"
               className="fm-yaml-editor"
               value={execPayload}
               onChange={e => setExecPayload(e.target.value)}
