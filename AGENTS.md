@@ -15,7 +15,7 @@ SPA que renderiza o que o BFF descreve: o menu vem de GET /bff/menu e o schema d
 
 <!-- gen:size -->Tamanho: 24 arquivos .ts e .tsx em `src`, dos quais 6 de teste (90 casos).<!-- /gen:size -->
 
-Stack: React 18.3, TypeScript 5.9, Vite 8, Vitest 3 com jsdom. CSS puro, sem biblioteca de UI nem gerenciador de estado, `fetch` nativo. Porta dev 5173, porta no Docker 80 (nginx).
+Stack: React 18.3, TypeScript 5.9, Vite 8, Vitest 3 com jsdom. CSS puro, sem biblioteca de UI nem gerenciador de estado, `fetch` nativo. Porta dev 5173, porta no Docker 8080 (nginx sem privilégios).
 
 ## Telas
 
@@ -91,7 +91,7 @@ Fora de `src`: `vite.config.ts` (proxy, testes, cobertura), `nginx/*`, `docker-e
 
 - Sem variáveis VITE_: o código usa o caminho relativo /bff.
 - Dev: proxy de /bff para http://localhost:8081 em `vite.config.ts`.
-- Docker: `BFF_URL` (padrão http://localhost:8081), `NGINX_PORT` (padrão 80) e `CSP_CONNECT_SRC_EXTRA` (padrão http://localhost:9000, origem do IdP em `connect-src` da CSP), aplicadas por `docker-entrypoint.sh` nos templates de `nginx/*` (`default.conf.template` e `security-headers.conf.template`).
+- Docker: `BFF_URL` (padrão http://localhost:8081), `NGINX_PORT` (padrão 8080: o nginx roda como uid 101 e não abre portas < 1024) e `CSP_CONNECT_SRC_EXTRA` (padrão http://localhost:9000, origem do IdP em `connect-src` da CSP), aplicadas por `docker-entrypoint.sh` nos templates de `nginx/*` (`default.conf.template` e `security-headers.conf.template`).
 - nginx envia nosniff, Referrer-Policy e CSP estrita (sem inline); `/assets/` tem cache imutável de 1 ano e `index.html` `no-cache`.
 - Dev com WireMock: `docker-compose-frontend-dev.yml`. Stack completa: `../docker-compose-service-portal.yml`.
 
@@ -122,3 +122,5 @@ CI (`ci.yml`): `build`, `docker-build` (buildx sem push, cache gha, smoke `curl 
 - Fluxos enviam YAML e têm `version` string; os recursos modulares enviam JSON e têm `version` numérica.
 - Em produção defina `CSP_CONNECT_SRC_EXTRA` com a origem real do IdP, senão o navegador bloqueia discovery e token. `add_header` em `location` substitui os herdados: por isso o snippet `security-headers.conf` é incluído em cada location que declara cabeçalhos.
 - Nunca commite `.env` com segredo nem `unsafe-inline` ou `unsafe-eval` no `index.html`.
+- Imagem final é nginx-unprivileged (nginxinc) (uid 101, sem root em runtime). O entrypoint grava `/etc/nginx/conf.d/default.conf` e `/etc/nginx/snippets/security-headers.conf`: o `Dockerfile` pré-cria e dá `chown` a esses diretórios; novo caminho gravável na partida exige o mesmo. Não volte para porta 80 nem para `USER root`. pid e temp dirs já ficam em `/tmp`.
+- Tags de base fixadas (`node:22.23-alpine3.24`, nginx-unprivileged 1.30-alpine3.24): atualize de propósito, sem voltar para `alpine`/`latest`. O `HEALTHCHECK` usa `127.0.0.1` porque `localhost` resolve para `::1` e o nginx só escuta IPv4.
