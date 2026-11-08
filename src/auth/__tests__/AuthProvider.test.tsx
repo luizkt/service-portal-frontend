@@ -358,7 +358,7 @@ describe('AuthProvider: login, 401 e logout', () => {
     mockFetch()
     const { unmount } = mountProvider()
     await waitFor(() => expect(status()).toBe('authenticated'))
-    const handler = setter.mock.calls.at(-1)![0]!
+    const handler = setter.mock.calls[setter.mock.calls.length - 1][0]!
     expect(typeof handler).toBe('function')
     act(() => handler())
     expect(status()).toBe('unauthenticated')
