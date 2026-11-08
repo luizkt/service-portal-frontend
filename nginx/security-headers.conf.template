@@ -1,0 +1,6 @@
+# Cabeçalhos de segurança. add_header em um location substitui os herdados do
+# server, por isso este snippet é incluído também nos locations que declaram
+# seus próprios add_header (/assets/ e index.html).
+add_header X-Content-Type-Options "nosniff" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' ${CSP_CONNECT_SRC_EXTRA}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;

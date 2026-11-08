@@ -35,7 +35,7 @@ export default function App() {
   }, [auth.status])
 
   if (auth.status === 'loading') {
-    return <div className="app-gate">Carregando...</div>
+    return <div className="app-gate" role="status">Carregando...</div>
   }
 
   if (auth.status === 'unauthenticated' || auth.status === 'error') {
@@ -72,7 +72,7 @@ export default function App() {
         </div>
         <div className="app-sidebar-body">
           {loadingMenu ? (
-            <div className="sidebar-loading">Carregando...</div>
+            <div className="sidebar-loading" role="status">Carregando...</div>
           ) : (
             <Sidebar
               items={menuItems}
@@ -115,7 +115,7 @@ export default function App() {
             <p className="app-welcome-hint">Selecione um módulo no menu lateral para começar.</p>
           </div>
         ) : !schema ? (
-          <div className="app-gate">Carregando...</div>
+          <div className="app-gate" role="status">Carregando...</div>
         ) : (
           <ComponentRenderer schema={schema} />
         )}

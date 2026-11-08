@@ -60,4 +60,11 @@ describe('decodeJwtPayload', () => {
     const token = makeJwt({ sub: 'x' })
     expect(decodeJwtPayload(token).sub).toBe('x')
   })
+
+  it('decodifica UTF-8 (acentos pt-BR) sem corromper o nome', () => {
+    const bytes = new TextEncoder().encode(JSON.stringify({ name: 'João Conceição Ávila' }))
+    const b64 = btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+    const token = `h.${b64}.s`
+    expect(decodeJwtPayload(token).name).toBe('João Conceição Ávila')
+  })
 })
