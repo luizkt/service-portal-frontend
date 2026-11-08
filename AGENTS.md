@@ -13,7 +13,7 @@ atualizado-em: 2026-11-07
 
 SPA que renderiza o que o BFF descreve: o menu vem de GET /bff/menu e o schema de cada tela vem de GET /bff/features/{id}/ui-schema. Não tem regra de negócio nem roteador: a tela ativa é estado do `App`. Fala somente com o BFF, nunca com Manager ou Orchestrator.
 
-<!-- gen:size -->Tamanho: 25 arquivos .ts e .tsx em `src`, dos quais 7 de teste (120 casos).<!-- /gen:size -->
+<!-- gen:size -->Tamanho: 27 arquivos .ts e .tsx em `src`, dos quais 9 de teste (130 casos).<!-- /gen:size -->
 
 Stack: React 18.3, TypeScript 5.6, Vite 5, Vitest 2 com jsdom. CSS puro, sem biblioteca de UI nem gerenciador de estado, `fetch` nativo. Porta dev 5173, porta no Docker 80 (nginx).
 
