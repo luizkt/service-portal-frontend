@@ -6,14 +6,14 @@
 repo: service-portal-frontend
 tipo: spa-react (Server Driven UI, fala só com o BFF)
 fonte-de-verdade: package.json, vite.config.ts, src/api/bff.ts, src/types/index.ts
-atualizado-em: 2026-11-07
+atualizado-em: 2026-11-14
 -->
 
 ## Resumo
 
 SPA que renderiza o que o BFF descreve: o menu vem de GET /bff/menu e o schema de cada tela vem de GET /bff/features/{id}/ui-schema. Não tem regra de negócio nem roteador: a tela ativa é estado do `App`. Fala somente com o BFF, nunca com Manager ou Orchestrator.
 
-<!-- gen:size -->Tamanho: 27 arquivos .ts e .tsx em `src`, dos quais 9 de teste (130 casos).<!-- /gen:size -->
+<!-- gen:size -->Tamanho: 24 arquivos .ts e .tsx em `src`, dos quais 6 de teste (88 casos).<!-- /gen:size -->
 
 Stack: React 18.3, TypeScript 5.9, Vite 8, Vitest 5 com jsdom. CSS puro, sem biblioteca de UI nem gerenciador de estado, `fetch` nativo. Porta dev 5173, porta no Docker 8080 (nginx sem privilégios).
 
@@ -26,7 +26,7 @@ A navegação não usa URL, exceto `/auth/callback`.
 | Login (usuário e senha) | público | `src/components/Login/LoginPage.tsx` |
 | Callback OIDC | público | `src/auth/AuthProvider.tsx` |
 | Menu lateral | token | `src/components/Sidebar/Sidebar.tsx`, montado em `src/App.tsx` |
-| flow-manager | token | `src/components/features/FlowManager/FlowManager.tsx` (listar, criar, ver, executar v1 e v2) |
+| flow-manager | token | `src/components/features/FlowManager/FlowManager.tsx` (listar, criar, ver, executar v1, v2 e v3) |
 | integration-manager | escrita ADMIN | `src/components/features/IntegrationManager/IntegrationManager.tsx` |
 | contract-manager | escrita ADMIN, WORKFLOWS | `src/components/features/ContractManager/ContractManager.tsx` |
 | validation-manager | escrita ADMIN, RULES | `src/components/features/ValidationManager/ValidationManager.tsx` |
@@ -43,7 +43,7 @@ Cliente único: `src/api/bff.ts` (base /bff). Exceção: `src/auth/oauth.ts` cha
 | `bff.flows.list`, `get`, `getYaml` | GET /flows[?page&size&sort&status], /flows/{id}/versions/{v}[/yaml] |
 | `bff.flows.create`, `update`, `delete` | POST /flows, PUT e DELETE /flows/{id}/versions/{v} (corpo YAML) |
 | `bff.flows.getExample` | GET /flows/{id}/versions/{v}/examples |
-| `bff.flows.execute`, `executeV2` | POST /flows/{id}/versions/{v}/executions e /executions/v2 |
+| `bff.flows.execute`, `executeV2`, `executeV3` | POST /flows/{id}/versions/{v}/executions, /executions/v2 (threads físicas) e /executions/v3 (virtual threads) |
 | `bff.integrations`, `contracts`, `validations` | `resourceApi`: list, get, listVersions, create, update, delete em /{recurso}[/{id}/versions/{n}] |
 
 ## Fluxo

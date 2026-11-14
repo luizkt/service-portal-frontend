@@ -196,6 +196,16 @@ export const bff = {
         `/flows/${encodeURIComponent(flowId)}/versions/${encodeURIComponent(version)}/executions/v2`,
         { method: 'POST', body: JSON.stringify(payload) }
       ),
+
+    executeV3: (
+      flowId: string,
+      version: string,
+      payload: Record<string, unknown>
+    ): Promise<OrchestrationResponse> =>
+      request(
+        `/flows/${encodeURIComponent(flowId)}/versions/${encodeURIComponent(version)}/executions/v3`,
+        { method: 'POST', body: JSON.stringify(payload) }
+      ),
   },
 
   integrations: resourceApi<IntegrationDefinition>('integrations'),
