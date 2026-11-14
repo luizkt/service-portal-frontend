@@ -13,11 +13,12 @@ export function Sidebar({ items, activeId, onSelect }: Props) {
   }
 
   return (
-    <nav className="sidebar-nav">
+    <nav className="sidebar-nav" aria-label="Menu principal">
       {items.map(item => (
         <button
           key={item.id}
           className={`sidebar-item${activeId === item.id ? ' sidebar-item--active' : ''}`}
+          aria-current={activeId === item.id ? 'page' : undefined}
           onClick={() => onSelect(item)}
         >
           <span className="sidebar-item-icon">&#9670;</span>

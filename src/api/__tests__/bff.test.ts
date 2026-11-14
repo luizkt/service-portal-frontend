@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { bff, setAuthConfig, setOnUnauthorized } from '../bff'
+import * as oauth from '../../auth/oauth'
 import { saveTokens } from '../../auth/storage'
 
 beforeEach(() => {
@@ -71,6 +72,24 @@ describe('bff client', () => {
 
     const items = await bff.menu()
     expect(items).toHaveLength(1)
+  })
+
+  it('401 concorrentes compartilham um único refresh (single-flight)', async () => {
+    const cfg = { issuerUri: 'https://idp/', clientId: 'spa', scopes: ['openid'] }
+    setAuthConfig(cfg)
+    saveTokens({ accessToken: 'OLD', refreshToken: 'RT', expiresAt: Date.now() + 60_000 })
+    const refresh = vi.spyOn(oauth, 'refreshTokens').mockResolvedValue({ accessToken: 'NEW', expiresAt: Date.now() + 60_000 })
+    let calls = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      calls++
+      if (calls <= 2) return new Response('nope', { status: 401, statusText: 'Unauthorized' })
+      return new Response('[]', { status: 200 })
+    })
+
+    const [a, b] = await Promise.all([bff.menu(), bff.menu()])
+    expect(a).toEqual([])
+    expect(b).toEqual([])
+    expect(refresh).toHaveBeenCalledTimes(1)
   })
 
   it('401 com authConfig: refresh falha → chama onUnauthorized e lança erro', async () => {
@@ -269,6 +288,9 @@ describe('bff client', () => {
     await bff.contracts.get('co', 2)
     expect(f1.mock.calls[0][0]).toBe('/bff/contracts/co/versions/2')
 
+    // vitest >= 4: spyOn num método já espionado reutiliza o mesmo mock; limpa as chamadas
+    // para que f2.mock.calls[0] seja de fato a chamada de validations.
+    f1.mockClear()
     const f2 = mockFetch(new Response('{"content":[]}', { status: 200 }))
     await bff.validations.create({ validationId: 'vl' })
     expect(f2.mock.calls[0][0]).toBe('/bff/validations')

@@ -1,5 +1,7 @@
 # Service Portal Frontend
 
+[![CI](https://github.com/luizkt/service-portal-frontend/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/luizkt/service-portal-frontend/actions/workflows/ci.yml?query=branch%3Amain)
+
 Frontend do Service Portal, baseado em React 18 + TypeScript + Vite 5.
 
 ## Visão Geral
@@ -77,7 +79,7 @@ O `default.conf.template` é gerado a partir de variáveis de ambiente no `entry
 
 | Variável | Descrição | Default |
 |---|---|---|
-| `NGINX_PORT` | Porta exposta pelo container | `80` |
+| `NGINX_PORT` | Porta do nginx no container (não-root: use >= 1024) | `8080` |
 | `BFF_URL` | URL base do BFF (proxy de `/bff/`) | `http://localhost:8081` |
 
 Tudo que casar com `/bff/` é repassado ao BFF; o restante cai no fallback SPA (`try_files ... /index.html`).
@@ -243,12 +245,12 @@ interface OrchestrationResponse {
 
 ```bash
 docker build -t service-portal-frontend .
-docker run --rm -p 80:80 \
+docker run --rm -p 8080:8080 \
   -e BFF_URL=http://service-portal-bff:8081 \
   service-portal-frontend
 ```
 
-O `Dockerfile` faz build em duas etapas (Node 22 + nginx alpine). O `docker-entrypoint.sh` substitui `${BFF_URL}` e `${NGINX_PORT}` no template do nginx antes de iniciar o servidor.
+O `Dockerfile` faz build em duas etapas (Node 22 + nginx-unprivileged alpine, roda como uid 101). O `docker-entrypoint.sh` substitui `${BFF_URL}` e `${NGINX_PORT}` no template do nginx antes de iniciar o servidor.
 
 ---
 

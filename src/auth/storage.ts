@@ -54,3 +54,10 @@ export function loadPkceState(): PkceState | null {
 export function clearPkceState(): void {
   sessionStorage.removeItem(PKCE_KEY)
 }
+
+/** Aceita só caminhos relativos do próprio site ("/x"); qualquer outra coisa vira "/". */
+export function sanitizeReturnTo(value: unknown): string {
+  if (typeof value !== 'string') return '/'
+  if (!value.startsWith('/') || value.startsWith('//') || value.includes('\\')) return '/'
+  return value
+}

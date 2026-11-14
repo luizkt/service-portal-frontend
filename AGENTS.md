@@ -15,7 +15,7 @@ SPA que renderiza o que o BFF descreve: o menu vem de GET /bff/menu e o schema d
 
 <!-- gen:size -->Tamanho: 24 arquivos .ts e .tsx em `src`, dos quais 6 de teste (88 casos).<!-- /gen:size -->
 
-Stack: React 18.3, TypeScript 5.6, Vite 5, Vitest 2 com jsdom. CSS puro, sem biblioteca de UI nem gerenciador de estado, `fetch` nativo. Porta dev 5173, porta no Docker 80 (nginx).
+Stack: React 18.3, TypeScript 5.9, Vite 8, Vitest 5 com jsdom. CSS puro, sem biblioteca de UI nem gerenciador de estado, `fetch` nativo. Porta dev 5173, porta no Docker 8080 (nginx sem privilégios).
 
 ## Telas
 
@@ -50,9 +50,9 @@ Cliente único: `src/api/bff.ts` (base /bff). Exceção: `src/auth/oauth.ts` cha
 
 1. `src/main.tsx` monta `AuthProvider` e `App`. O provider busca /bff/auth/config, faz discovery OIDC e, se a URL é /auth/callback, troca o code por tokens (PKCE S256).
 2. Login normal: `LoginPage` chama `loginWithCredentials`, que posta em /bff/auth/login. `startLogin` (redirect PKCE) existe, mas nenhuma tela o chama.
-3. Tokens ficam em `sessionStorage` (`src/auth/storage.ts`). `groups` e `displayName` saem do JWT por `src/auth/jwt.ts`.
+3. Tokens ficam em `sessionStorage` (`src/auth/storage.ts`). `groups` e `displayName` saem do JWT por `src/auth/jwt.ts` (decodifica base64url e UTF-8, para nomes com acento).
 4. `App` só carrega o menu quando `status` é `authenticated`. Ao escolher um item, busca o ui-schema e entrega a `ComponentRenderer`. Erro 403 vira mensagem de acesso negado.
-5. `request`, em `bff.ts`, injeta o Bearer. Em 401 tenta `refreshTokens` uma vez; se falhar, chama `onUnauthorized` e a sessão cai.
+5. `request`, em `bff.ts`, injeta o Bearer. Em 401 tenta `refreshTokens` uma vez (single-flight: 401s concorrentes compartilham um refresh só, `refreshOnce`); se falhar, chama `onUnauthorized` e a sessão cai.
 6. Edição: `FlowManager` envia o YAML inteiro em PUT. `ResourceManager` edita o JSON do item e chama `api.update(id, version, body)`.
 
 ## Mapa
@@ -83,7 +83,7 @@ Fora de `src`: `vite.config.ts` (proxy, testes, cobertura), `nginx/*`, `docker-e
 | Template inicial de criação | `TEMPLATE` no `*Manager.tsx` do recurso; `FLOW_TEMPLATE` em `FlowManager.tsx` |
 | Layout e estilo | `src/App.tsx` e `src/*.css` (casca), `src/styles/*` (gestão) |
 | Rótulo de grupo | `GROUP_LABELS` em `src/App.tsx` |
-| Login, refresh, logout | `loginWithPassword`, `refreshTokens`, `logout` em `src/auth/oauth.ts`; estado em `src/auth/AuthProvider.tsx` |
+| Login, refresh, logout | `loginWithPassword`, `refreshTokens`, `logout` em `src/auth/oauth.ts`; estado em `src/auth/AuthProvider.tsx` (teste em `src/auth/__tests__/AuthProvider.test.tsx`) |
 | URL do BFF ou porta | Dev: `server.proxy` em `vite.config.ts`. Docker: `BFF_URL` e `NGINX_PORT` |
 | Gate de cobertura | `test.coverage` em `vite.config.ts` |
 
@@ -91,7 +91,8 @@ Fora de `src`: `vite.config.ts` (proxy, testes, cobertura), `nginx/*`, `docker-e
 
 - Sem variáveis VITE_: o código usa o caminho relativo /bff.
 - Dev: proxy de /bff para http://localhost:8081 em `vite.config.ts`.
-- Docker: `BFF_URL` (padrão http://localhost:8081) e `NGINX_PORT` (padrão 80), aplicadas por `docker-entrypoint.sh` no template de `nginx/*`.
+- Docker: `BFF_URL` (padrão http://localhost:8081), `NGINX_PORT` (padrão 8080: o nginx roda como uid 101 e não abre portas < 1024) e `CSP_CONNECT_SRC_EXTRA` (padrão http://localhost:9000, origem do IdP em `connect-src` da CSP), aplicadas por `docker-entrypoint.sh` nos templates de `nginx/*` (`default.conf.template` e `security-headers.conf.template`).
+- nginx envia nosniff, Referrer-Policy e CSP estrita (sem inline); `/assets/` tem cache imutável de 1 ano e `index.html` `no-cache`.
 - Dev com WireMock: `docker-compose-frontend-dev.yml`. Stack completa: `../docker-compose-service-portal.yml`.
 
 ## Comandos
@@ -105,13 +106,21 @@ npm run coverage             # relatório em coverage/index.html
 
 Não há script de lint.
 
+CI (`ci.yml`): `build`, `docker-build` (buildx sem push, cache gha, smoke `curl /` e checagem do header CSP) e `agents-index` rodam em paralelo; `test` (coverage) só espera `build`; `open-pr` precisa de `test`, `docker-build` e `agents-index`.
+
 ## Armadilhas
 
 - Sem biblioteca de UI, sem estado global, sem `fetch` fora de `bff.ts` (exceção: `oauth.ts`). Não atualizar React 18 nem TypeScript 5.
 - Dependência nova só com justificativa e versão exata (o `package.json` usa `^`: não propague). Em pipeline use `npm ci`.
-- O gate de 95% cobre só `src/auth/**/*.ts` e `src/api/**/*.ts`. Mudou `auth` ou `api`: mude o teste.
+- O gate de 95% cobre `src/auth/**/*.ts`, `src/auth/**/*.tsx` (inclui `AuthProvider.tsx`) e `src/api/**/*.ts`. Mudou `auth` ou `api`: mude o teste. Sem teste e fora do gate: `FlowManager`, `App`, `ComponentRenderer` e os demais gerenciadores (só `ResourceManager` tem).
 - Tokens ficam em `sessionStorage` de propósito. Não use `localStorage`.
 - `bff.ts` e `AuthProvider` se ligam por setters de módulo. Sem o provider montado, refresh e logout em 401 não funcionam.
+- Refresh em 401 é single-flight (`refreshInFlight` em `bff.ts`): não chame `refreshTokens` direto de outro lugar, o refresh_token pode ser rotacionado pelo IdP.
+- `returnTo` do callback passa por `sanitizeReturnTo` (`storage.ts`): só caminho relativo começando com `/`, senão `/`.
+- Acessibilidade: erros usam `role="alert"`, carregando `role="status"`, o menu é `<nav aria-label>` com `aria-current`, e a primeira célula das tabelas tem um `button.row-link` (o clique na linha continua como atalho; o botão faz `stopPropagation`).
 - `request` só devolve texto se o header `Accept` contém yaml; senão faz `res.json()`.
 - Fluxos enviam YAML e têm `version` string; os recursos modulares enviam JSON e têm `version` numérica.
+- Em produção defina `CSP_CONNECT_SRC_EXTRA` com a origem real do IdP, senão o navegador bloqueia discovery e token. `add_header` em `location` substitui os herdados: por isso o snippet `security-headers.conf` é incluído em cada location que declara cabeçalhos.
 - Nunca commite `.env` com segredo nem `unsafe-inline` ou `unsafe-eval` no `index.html`.
+- Imagem final é nginx-unprivileged (nginxinc) (uid 101, sem root em runtime). O entrypoint grava `/etc/nginx/conf.d/default.conf` e `/etc/nginx/snippets/security-headers.conf`: o `Dockerfile` pré-cria e dá `chown` a esses diretórios; novo caminho gravável na partida exige o mesmo. Não volte para porta 80 nem para `USER root`. pid e temp dirs já ficam em `/tmp`.
+- Tags de base fixadas (`node:22.23-alpine3.24`, nginx-unprivileged 1.30-alpine3.24): atualize de propósito, sem voltar para `alpine`/`latest`. O `HEALTHCHECK` usa `127.0.0.1` porque `localhost` resolve para `::1` e o nginx só escuta IPv4.

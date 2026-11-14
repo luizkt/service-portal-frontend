@@ -10,7 +10,7 @@ import type {
   UiSchema,
   ValidationDefinition,
 } from '../types'
-import { loadTokens } from '../auth/storage'
+import { loadTokens, type StoredTokens } from '../auth/storage'
 import { type AuthConfig, refreshTokens } from '../auth/oauth'
 
 const BASE = '/bff'
@@ -27,6 +27,17 @@ export function setAuthConfig(cfg: AuthConfig | null): void {
   authConfig = cfg
 }
 
+/** Refresh em andamento: 401s concorrentes compartilham uma única chamada (single-flight). */
+let refreshInFlight: Promise<StoredTokens | null> | null = null
+function refreshOnce(cfg: AuthConfig): Promise<StoredTokens | null> {
+  if (refreshInFlight) return refreshInFlight
+  const p: Promise<StoredTokens | null> = refreshTokens(cfg).finally(() => {
+    refreshInFlight = null
+  })
+  refreshInFlight = p
+  return p
+}
+
 async function request<T>(path: string, options?: RequestInit, isRetry = false): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -40,7 +51,7 @@ async function request<T>(path: string, options?: RequestInit, isRetry = false):
 
   if (res.status === 401) {
     if (!isRetry && authConfig) {
-      const refreshed = await refreshTokens(authConfig)
+      const refreshed = await refreshOnce(authConfig)
       if (refreshed) return request<T>(path, options, true)
     }
     if (onUnauthorized) onUnauthorized()
