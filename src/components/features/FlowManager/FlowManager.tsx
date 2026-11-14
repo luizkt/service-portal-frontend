@@ -57,6 +57,8 @@ export function FlowManager({ schema }: Props) {
   const [executing, setExecuting] = useState(false)
   const [execResultV2, setExecResultV2] = useState<OrchestrationResponse | null>(null)
   const [executingV2, setExecutingV2] = useState(false)
+  const [execResultV3, setExecResultV3] = useState<OrchestrationResponse | null>(null)
+  const [executingV3, setExecutingV3] = useState(false)
   const [exampleFields, setExampleFields] = useState<ContractField[]>([])
 
   const loadFlows = async () => {
@@ -149,6 +151,7 @@ export function FlowManager({ schema }: Props) {
     setSelected(flow)
     setExecResult(null)
     setExecResultV2(null)
+    setExecResultV3(null)
     setExampleFields([])
     setView('execute')
     try {
@@ -198,6 +201,22 @@ export function FlowManager({ schema }: Props) {
       setError(String(e))
     } finally {
       setExecutingV2(false)
+    }
+  }
+
+  const handleExecuteV3 = async () => {
+    if (!selected) return
+    const payload = parsePayload()
+    if (!payload) return
+    setExecutingV3(true)
+    setExecResultV3(null)
+    setError(null)
+    try {
+      setExecResultV3(await bff.flows.executeV3(selected.flowId, selected.version, payload))
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setExecutingV3(false)
     }
   }
 
@@ -394,16 +413,19 @@ export function FlowManager({ schema }: Props) {
               spellCheck={false}
             />
             <div className="fm-exec-actions">
-              <button className="btn btn-primary" onClick={handleExecute} disabled={executing || executingV2}>
+              <button className="btn btn-primary" onClick={handleExecute} disabled={executing || executingV2 || executingV3}>
                 {executing ? 'Executando...' : '▶ v1 Sequencial'}
               </button>
-              <button className="btn btn-secondary" onClick={handleExecuteV2} disabled={executing || executingV2}>
-                {executingV2 ? 'Executando...' : '▶ v2 Paralelo'}
+              <button className="btn btn-secondary" onClick={handleExecuteV2} disabled={executing || executingV2 || executingV3}>
+                {executingV2 ? 'Executando...' : '▶ v2 Threads Físicas'}
+              </button>
+              <button className="btn btn-secondary" onClick={handleExecuteV3} disabled={executing || executingV2 || executingV3}>
+                {executingV3 ? 'Executando...' : '▶ v3 Virtual Threads'}
               </button>
             </div>
           </div>
 
-          {(execResult || execResultV2) && (
+          {(execResult || execResultV2 || execResultV3) && (
             <div className="fm-exec-compare">
               {execResult && (
                 <div className={`fm-exec-result ${execResult.status === 'SUCCESS' ? 'fm-exec-result--success' : 'fm-exec-result--error'}`}>
@@ -428,7 +450,7 @@ export function FlowManager({ schema }: Props) {
               {execResultV2 && (
                 <div className={`fm-exec-result ${execResultV2.status === 'SUCCESS' ? 'fm-exec-result--success' : 'fm-exec-result--error'}`}>
                   <div className="fm-exec-result-header">
-                    <strong>v2 — Paralelo</strong>
+                    <strong>v2 — Threads Físicas</strong>
                     <span className="fm-exec-status">{execResultV2.status}</span>
                     {execResultV2.executionId && <span className="fm-exec-id">ID: {execResultV2.executionId}</span>}
                   </div>
@@ -441,6 +463,26 @@ export function FlowManager({ schema }: Props) {
                     <>
                       <h4 className="fm-exec-section-title">Validações</h4>
                       <pre className="fm-exec-json fm-exec-validations">{JSON.stringify(execResultV2.validations, null, 2)}</pre>
+                    </>
+                  )}
+                </div>
+              )}
+              {execResultV3 && (
+                <div className={`fm-exec-result ${execResultV3.status === 'SUCCESS' ? 'fm-exec-result--success' : 'fm-exec-result--error'}`}>
+                  <div className="fm-exec-result-header">
+                    <strong>v3 — Virtual Threads</strong>
+                    <span className="fm-exec-status">{execResultV3.status}</span>
+                    {execResultV3.executionId && <span className="fm-exec-id">ID: {execResultV3.executionId}</span>}
+                  </div>
+                  {execResultV3.errorMessage && (
+                    <div className="fm-exec-error-msg">{execResultV3.errorMessage}</div>
+                  )}
+                  <h4 className="fm-exec-section-title">Integrações</h4>
+                  <pre className="fm-exec-json">{JSON.stringify(execResultV3.result, null, 2)}</pre>
+                  {execResultV3.validations && Object.keys(execResultV3.validations).length > 0 && (
+                    <>
+                      <h4 className="fm-exec-section-title">Validações</h4>
+                      <pre className="fm-exec-json fm-exec-validations">{JSON.stringify(execResultV3.validations, null, 2)}</pre>
                     </>
                   )}
                 </div>
