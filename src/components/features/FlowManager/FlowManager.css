@@ -257,10 +257,10 @@
   margin-top: 12px;
 }
 
-/* Comparison layout: v1 and v2 side by side when both have results */
+/* Comparison layout: v1, v2 and v3 side by side when they have results */
 .fm-exec-compare {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
   margin-top: 20px;
 }
